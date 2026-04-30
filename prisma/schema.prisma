@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  handle       String   @unique
+  name         String
+  bio          String?
+  tagline      String?
+  initials     String   @default("U")
+  avatarColor  String   @default("ag")
+  country      String?
+  travelStyle  String?
+  verified     Boolean  @default(false)
+  followers    Int      @default(0)
+  vlogCount    Int      @default(0)
+  avgRating    Float    @default(0)
+  totalViews   Int      @default(0)
+  credits      Int      @default(0)
+  earnings     Float    @default(0)
+  youtubeUrl   String?
+  instagramUrl String?
+  tiktokUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vlogs   Vlog[]
+  reviews Review[]
+  unlocks Unlock[]
+}
+
+model Vlog {
+  id             String   @id @default(cuid())
+  title          String
+  location       String
+  country        String
+  region         String   @default("All regions")
+  vibe           String   @default("All vlogs")
+  cost           Int?
+  currency       String   @default("PHP")
+  duration       Int?
+  rating         Float    @default(0)
+  ratingCount    Int      @default(0)
+  views          Int      @default(0)
+  likes          Int      @default(0)
+  credits        Int      @default(0)
+  description    String?
+  youtubeUrl     String?
+  facebookUrl    String?
+  tiktokUrl      String?
+  instagramUrl   String?
+  coverImage     String?
+  thumbnailColor String   @default("t1")
+  trending       Boolean  @default(false)
+  status         String   @default("live")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  authorId  String
+  author    User           @relation(fields: [authorId], references: [id])
+  itinerary ItineraryDay[]
+  reviews   Review[]
+  unlocks   Unlock[]
+}
+
+model ItineraryDay {
+  id              String  @id @default(cuid())
+  day             Int
+  activity        String
+  cost            Int?
+  locked          Boolean @default(false)
+  description     String?
+  clipDuration    String?
+  clipDescription String?
+  highlights      String?
+  foodTips        String?
+  gettingThere    String?
+  tips            String?
+  mediaUrl        String?
+  mediaType       String?
+
+  vlogId String
+  vlog   Vlog   @relation(fields: [vlogId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  authorName String
+  rating     Int      @default(5)
+  text       String
+  createdAt  DateTime @default(now())
+
+  vlogId   String
+  vlog     Vlog  @relation(fields: [vlogId], references: [id], onDelete: Cascade)
+  authorId String?
+  author   User?  @relation(fields: [authorId], references: [id])
+}
+
+model Unlock {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  vlogId String
+  vlog   Vlog   @relation(fields: [vlogId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([vlogId, userId])
+}

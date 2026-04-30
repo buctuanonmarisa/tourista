@@ -1,0 +1,536 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--g:#2d6a4f;--g1:#1f4d36;--gl:#eaf5ee;--gm:#c8e6d5;--am:#c07a2a;--al:#fdf5ec;--bd:rgba(0,0,0,0.09)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:var(--color-text-primary);background:var(--color-background-tertiary)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+/* NAV */
+.nav{background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-tertiary);padding:0 16px;height:54px;display:flex;align-items:center;gap:10px}
+.logo{display:flex;align-items:center;gap:7px;cursor:pointer;text-decoration:none}
+.logo-t{font-size:19px;font-weight:700;color:var(--g1);letter-spacing:-.3px}
+.sp{flex:1}
+.ni{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;background:transparent;color:var(--color-text-secondary);position:relative}
+.ni:hover{background:var(--gl);color:var(--g)}
+.ni svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.ndot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:#e53935;border:1.5px solid var(--color-background-primary)}
+.pbtn{padding:8px 15px;background:var(--g);color:#fff;border:none;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer}
+.pbtn:hover{background:var(--g1)}
+.avb{width:32px;height:32px;border-radius:50%;background:var(--g);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;cursor:pointer;border:none}
+/* TABS */
+.tabs{background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;padding:0 12px;overflow-x:auto}
+.tabs::-webkit-scrollbar{display:none}
+.tb{padding:11px 13px;font-size:13px;font-weight:500;cursor:pointer;color:var(--color-text-secondary);border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.tb:hover{color:var(--g)}.tb.on{color:var(--g);border-bottom-color:var(--g)}
+.tx{width:15px;height:15px;border-radius:50%;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer}
+.tx:hover{background:var(--gm);color:var(--g1)}
+/* PAGE */
+.page{display:none}.page.on{display:block}
+.w{max-width:640px;margin:0 auto;padding:22px 16px 48px}
+/* INPUTS */
+.si{display:flex;align-items:center;gap:8px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:11px;padding:10px 14px;margin-bottom:18px}
+.si:focus-within{border-color:var(--g)}
+.si svg{width:15px;height:15px;stroke:var(--color-text-secondary);fill:none;stroke-width:1.8;stroke-linecap:round;flex-shrink:0}
+.si input{border:none;background:transparent;outline:none;font-size:14px;width:100%;color:var(--color-text-primary)}
+.si input::placeholder{color:var(--color-text-secondary)}
+/* CHIPS */
+.cg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.clbl{font-size:11.5px;color:var(--color-text-secondary);margin-bottom:8px}
+.ch{padding:6px 13px;border-radius:20px;font-size:12.5px;font-weight:500;cursor:pointer;border:0.5px solid var(--color-border-secondary);color:var(--color-text-secondary);background:var(--color-background-primary);transition:all .12s}
+.ch:hover{border-color:var(--g);color:var(--g)}.ch.on{background:var(--g);color:#fff;border-color:var(--g)}
+/* VLOG LIST */
+.slbl{font-size:11px;font-weight:500;letter-spacing:1.3px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:11px;margin-top:20px}
+.vl{display:flex;flex-direction:column;gap:1px;border:0.5px solid var(--color-border-tertiary);border-radius:12px;overflow:hidden;background:var(--color-border-tertiary)}
+.vr{display:flex;gap:12px;align-items:center;padding:13px 14px;background:var(--color-background-primary);cursor:pointer}
+.vr:hover{background:var(--gl)}
+.vth{width:84px;height:56px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.vp{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center}
+.vp svg{width:9px;height:9px;fill:#1f4d36;margin-left:1px}
+.t1{background:#1a4532}.t2{background:#4a2c12}.t3{background:#12284a}.t4{background:#3a1448}.t5{background:#083a2e}
+.vi{flex:1;min-width:0}
+.vt{font-size:13.5px;font-weight:500;line-height:1.4;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vm{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px}
+.bx{font-size:11px;font-weight:500;padding:2px 7px;border-radius:6px}
+.bc{background:var(--al);color:#8a5000}.bf{background:var(--gl);color:var(--g1)}
+.av{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff}
+.ag{background:var(--g)}.ac{background:#b04820}.ab{background:#1555a0}.ap{background:#5a1088}
+/* DETAIL */
+.bk{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--color-text-secondary);cursor:pointer;margin-bottom:18px;width:fit-content}
+.bk:hover{color:var(--g)}
+.bk svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.vbox{border-radius:12px;overflow:hidden;margin-bottom:8px}
+.vpl{height:230px;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}
+.vbadge{position:absolute;top:10px;left:10px;padding:3px 9px;border-radius:7px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:500}
+.vpbig{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center}
+.vpbig svg{width:17px;height:17px;fill:var(--g1);margin-left:2px}
+.won{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:9px 12px;background:var(--color-background-secondary);font-size:12px;color:var(--color-text-secondary)}
+.pp{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:8px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);font-size:12px;font-weight:500;cursor:pointer;color:var(--color-text-primary)}
+.pp:hover{border-color:var(--g);color:var(--g)}
+.pdot{width:7px;height:7px;border-radius:50%}
+.dtt{font-size:20px;font-weight:700;line-height:1.3;margin-bottom:10px;margin-top:12px}
+.dvl{display:flex;align-items:center;gap:9px;padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:12px;cursor:pointer}
+.dvl:hover .dvln{text-decoration:underline;color:var(--g)}
+.dvln{font-size:14px;font-weight:500}
+.dvls{font-size:12px;color:var(--color-text-secondary)}
+.fbtn{margin-left:auto;padding:6px 14px;border-radius:18px;border:0.5px solid var(--color-border-secondary);font-size:12.5px;font-weight:500;cursor:pointer;background:transparent;color:var(--color-text-primary)}
+.fbtn:hover{border-color:var(--g);color:var(--g)}.fbtn.fol{background:var(--gl);border-color:var(--gm);color:var(--g1)}
+.s4{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border:0.5px solid var(--color-border-tertiary);border-radius:10px;overflow:hidden;background:var(--color-border-tertiary);margin-bottom:13px}
+.sb{padding:11px;background:var(--color-background-primary);text-align:center}
+.sv{font-size:14px;font-weight:500;margin-bottom:1px}.sl{font-size:11px;color:var(--color-text-secondary)}
+.dd{font-size:14px;line-height:1.75;color:var(--color-text-secondary);margin-bottom:16px}
+/* ENGAGEMENT ROW - above reviews */
+.eng{display:flex;gap:6px;padding:11px 0;border-top:0.5px solid var(--color-border-tertiary);border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:16px}
+.eb{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 4px;border-radius:9px;border:0.5px solid var(--color-border-secondary);font-size:12.5px;font-weight:500;cursor:pointer;background:transparent;color:var(--color-text-primary)}
+.eb:hover{background:var(--gl);border-color:var(--gm);color:var(--g1)}
+.eb.lk{color:#e53935;border-color:#facccc;background:#fff5f5}
+.eb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.eb.lk svg{fill:#e53935;stroke:#e53935}
+/* UNLOCK */
+.ulb{border:0.5px solid #ddb870;border-radius:11px;padding:14px;margin-bottom:16px;background:var(--al)}
+.ulh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.uln{font-size:14px;font-weight:500}.ulp{font-size:18px;font-weight:500;color:var(--am)}
+.uld{font-size:13px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:11px}
+.ulc{width:100%;padding:10px;background:var(--am);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:500;cursor:pointer}
+.ulc:hover{opacity:.88}
+/* ITINERARY */
+.id{padding:13px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.id:last-of-type{border:none}
+.ir1{display:flex;align-items:flex-start;gap:9px;margin-bottom:5px}
+.iday{font-size:11px;font-weight:600;color:var(--g);min-width:34px;padding-top:2px}
+.inn{font-size:14px;font-weight:500;flex:1;line-height:1.4}
+.ico{font-size:12px;font-weight:500;color:var(--am);white-space:nowrap;padding:2px 7px;border-radius:6px;background:var(--al)}
+.idc{font-size:13px;color:var(--color-text-secondary);line-height:1.6;margin-left:43px;margin-bottom:7px}
+.iclr{display:flex;align-items:center;gap:8px;margin-left:43px}
+.icth{width:66px;height:42px;border-radius:7px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer}
+.icp{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.88);display:flex;align-items:center;justify-content:center}
+.icp svg{width:7px;height:7px;fill:var(--g1);margin-left:1px}
+.iclbl{font-size:12px;color:var(--color-text-secondary);font-style:italic}
+.ilk{display:flex;align-items:center;gap:5px;margin-left:43px;font-size:12.5px;color:var(--am)}
+.ilk svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
+/* REVIEWS */
+.rlbl{font-size:11px;font-weight:500;letter-spacing:1.2px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:12px}
+.ri{padding:12px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.ri:last-of-type{border:none}
+.rh{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.rn{font-size:13.5px;font-weight:500;flex:1}
+.rs{font-size:12px;color:var(--am)}.rt{font-size:12px;color:var(--color-text-secondary)}
+.rtx{font-size:13.5px;line-height:1.65;color:var(--color-text-secondary)}
+.rir{display:flex;gap:8px;align-items:center;padding-top:12px;border-top:0.5px solid var(--color-border-tertiary)}
+.rin{flex:1;padding:9px 12px;border-radius:9px;border:0.5px solid var(--color-border-secondary);font-size:13.5px;outline:none;background:var(--color-background-primary);color:var(--color-text-primary)}
+.rin:focus{border-color:var(--g)}
+.rsb{padding:9px 14px;background:var(--g);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer}
+/* PROFILE */
+.pcv{height:130px;position:relative;overflow:hidden;border-radius:12px 12px 0 0}
+.pbar{display:flex;align-items:flex-end;gap:10px;padding:0 14px 12px;border-bottom:0.5px solid var(--color-border-tertiary);margin-top:-24px;position:relative}
+.pavw{width:58px;height:58px;border-radius:50%;border:3px solid var(--color-background-primary);overflow:hidden;flex-shrink:0}
+.pavi{width:100%;height:100%;background:var(--g);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff}
+.pn{font-size:17px;font-weight:700}
+.ps{font-size:12px;color:var(--color-text-secondary);margin-top:2px}
+.pac{display:flex;gap:7px;padding-bottom:3px;margin-left:auto}
+.edbtn{display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:9px;border:0.5px solid var(--color-border-secondary);font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:var(--color-text-primary)}
+.edbtn:hover{border-color:var(--g);color:var(--g)}
+.edbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.ptbs{display:flex;padding:0 14px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.pt{padding:10px 12px;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--color-text-secondary)}
+.pt.on{color:var(--g);border-bottom-color:var(--g)}
+.pstats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:12px 14px}
+.pst{background:var(--gl);border-radius:8px;padding:10px;text-align:center}
+.psv{font-size:16px;font-weight:600;color:var(--g1)}.psl{font-size:11px;color:var(--g)}
+.vg{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:0 14px 13px}
+.vgc{border-radius:9px;overflow:hidden;cursor:pointer;border:0.5px solid var(--color-border-tertiary)}
+.vgc:hover{border-color:var(--g)}
+.vgth{height:68px;display:flex;align-items:center;justify-content:center}
+.vgi{padding:7px 8px}
+.vgn{font-size:12.5px;font-weight:500;margin-bottom:2px}.vgm{font-size:11.5px;color:var(--color-text-secondary)}
+/* POST */
+.steps{display:flex;align-items:center;gap:0;margin-bottom:22px}
+.si2{display:flex;align-items:center;gap:6px}
+.sd{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;border:1.5px solid var(--color-border-secondary);color:var(--color-text-secondary);flex-shrink:0}
+.sd.dn{background:var(--g);color:#fff;border-color:var(--g)}.sd.ac{border-color:var(--g);color:var(--g)}
+.sl2{font-size:12px;color:var(--color-text-secondary);white-space:nowrap}.sl2.ac{color:var(--g);font-weight:500}
+.sln{flex:1;height:1px;background:var(--color-border-tertiary);margin:0 7px}.sln.dn{background:var(--g)}
+.sc{display:none}.sc.on{display:block}
+.vlbx{background:var(--color-background-secondary);border-radius:11px;padding:14px;margin-bottom:14px;border:0.5px solid var(--color-border-tertiary)}
+.vlbr{display:flex;gap:8px;align-items:center;margin-top:9px}
+.vli{flex:1;padding:10px 12px;border-radius:9px;border:0.5px solid var(--color-border-secondary);font-size:14px;outline:none;color:var(--color-text-primary);background:var(--color-background-primary)}
+.vli:focus{border-color:var(--g)}
+.vlbb{padding:10px 14px;background:var(--g);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.detp{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:8px;background:var(--gl);font-size:13px;color:var(--g1);margin-top:8px;font-weight:500}
+.detp svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:13px}
+.fg label{font-size:11.5px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.4px}
+.fi{width:100%;padding:9px 12px;border-radius:9px;border:0.5px solid var(--color-border-secondary);font-size:14px;outline:none;color:var(--color-text-primary);background:var(--color-background-primary)}
+.fi:focus{border-color:var(--g)}
+textarea.fi{resize:vertical;min-height:75px;line-height:1.6}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.aml{font-size:13px;color:var(--g);cursor:pointer;margin-top:7px;display:inline-block}
+.xls{display:none;flex-direction:column;gap:7px;margin-top:9px}
+.xls.on{display:flex}
+.xr{display:flex;align-items:center;gap:8px;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:9px;background:var(--color-background-primary)}
+.xd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.xi{flex:1;border:none;background:transparent;font-size:13.5px;outline:none;color:var(--color-text-primary)}
+.xi::placeholder{color:var(--color-text-secondary)}
+.ibr{display:flex;align-items:center;gap:7px;padding:9px 11px;border:0.5px solid var(--color-border-secondary);border-radius:9px;background:var(--color-background-secondary);margin-bottom:6px}
+.ibd{font-size:11px;font-weight:600;color:var(--g);min-width:22px}
+.ibin{flex:1;border:none;background:transparent;font-size:13.5px;outline:none;color:var(--color-text-primary)}
+.ibin::placeholder{color:var(--color-text-secondary)}
+.ibco{width:72px;padding:4px 7px;border-radius:7px;border:0.5px solid var(--color-border-secondary);font-size:12px;outline:none;background:var(--color-background-primary);color:var(--color-text-primary)}
+.tog{padding:4px 9px;border-radius:7px;font-size:11px;font-weight:500;cursor:pointer;border:0.5px solid var(--color-border-secondary)}
+.tgf{background:var(--gl);color:var(--g1);border-color:var(--gm)}.tgl{background:var(--al);color:#8a5000;border-color:#ddb870}
+.ibadd{display:flex;align-items:center;justify-content:center;gap:5px;padding:9px;border:0.5px dashed var(--color-border-secondary);border-radius:9px;font-size:13.5px;color:var(--color-text-secondary);cursor:pointer}
+.crc{padding:13px;border-radius:11px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary)}
+.crt{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.crv{font-size:20px;font-weight:500;color:var(--am)}.crl{font-size:13px;color:var(--color-text-secondary)}
+.cri{font-size:13px;color:var(--color-text-secondary);line-height:1.65;margin-top:9px;padding-top:9px;border-top:0.5px solid var(--color-border-tertiary)}
+.ff{display:flex;justify-content:space-between;align-items:center;padding-top:16px;border-top:0.5px solid var(--color-border-tertiary);margin-top:4px}
+.bb{padding:9px 16px;border-radius:9px;border:0.5px solid var(--color-border-secondary);font-size:13.5px;font-weight:500;cursor:pointer;background:transparent;color:var(--color-text-primary)}
+.nb{padding:9px 20px;border-radius:9px;background:var(--g);color:#fff;border:none;font-size:13.5px;font-weight:500;cursor:pointer}
+/* DASH */
+.kpig{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px}
+.kp{padding:12px;border-radius:10px;border:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary)}
+.kpv{font-size:19px;font-weight:600;margin-bottom:2px}.kpl{font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.6px}.kpc{font-size:12px;margin-top:3px}
+.up{color:var(--g)}.dw{color:#c45020}
+.ca{padding:12px;border-radius:10px;border:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary);margin-bottom:12px}
+.brs{display:flex;align-items:flex-end;gap:5px;height:64px}
+.bar{flex:1;border-radius:3px 3px 0 0;background:var(--gm);min-height:3px;cursor:pointer}
+.bar:hover,.bar.hi{background:var(--g)}
+.blbs{display:flex;gap:5px;margin-top:4px}
+.blb{flex:1;font-size:10px;color:var(--color-text-secondary);text-align:center}
+.vl2{display:flex;flex-direction:column;gap:1px;border:0.5px solid var(--color-border-tertiary);border-radius:11px;overflow:hidden;background:var(--color-border-tertiary)}
+.vr2{display:flex;align-items:center;gap:9px;padding:11px 13px;background:var(--color-background-primary);cursor:pointer}
+.vr2:hover{background:var(--gl)}
+.vt2{width:44px;height:29px;border-radius:6px;flex-shrink:0}
+.vn2{font-size:13.5px;font-weight:500;flex:1}.vs2{font-size:12px;color:var(--color-text-secondary);display:block}
+.st{font-size:11px;font-weight:500;padding:3px 8px;border-radius:7px}
+.sl3{background:var(--gl);color:var(--g1)}.sd2{background:var(--al);color:#8a5000}.sr2{background:#eef0ff;color:#3a4ab0}
+/* NOTIF */
+.nl{display:flex;flex-direction:column;gap:1px;border:0.5px solid var(--color-border-tertiary);border-radius:11px;overflow:hidden;background:var(--color-border-tertiary)}
+.nr{display:flex;gap:10px;padding:12px 14px;background:var(--color-background-primary);cursor:pointer;align-items:flex-start}
+.nr:hover{background:var(--gl)}.nr.ur{background:var(--gl)}
+.nic{width:33px;height:33px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.ntx{font-size:13.5px;line-height:1.55;flex:1}
+.ntm{font-size:12px;color:var(--color-text-secondary);margin-top:2px}
+.nd2{width:8px;height:8px;border-radius:50%;background:var(--g);margin-top:5px;flex-shrink:0}
+/* EDIT */
+.ecv{height:105px;border-radius:11px;background:var(--g1);margin-bottom:13px;display:flex;align-items:flex-end;justify-content:flex-end;padding:9px;cursor:pointer}
+.ecvb{padding:5px 11px;background:rgba(255,255,255,.15);color:#fff;border-radius:7px;font-size:12px;cursor:pointer;border:1px solid rgba(255,255,255,.25)}
+.eav{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.efav{width:54px;height:54px;border-radius:50%;background:var(--g);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;color:#fff;cursor:pointer;position:relative}
+.efavc{position:absolute;bottom:0;right:0;width:17px;height:17px;border-radius:50%;background:var(--g);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;border:2px solid var(--color-background-primary)}
+</style>
+
+<h2 class="sr-only">Tourista travel vlog portal wireframe</h2>
+
+<!-- NAV -->
+<div class="nav">
+  <div class="logo" onclick="go('browse')">
+    <svg width="26" height="30" viewBox="0 0 80 90" fill="none">
+      <path d="M40 8C24 8 14 20 14 34c0 18 26 46 26 46S66 52 66 34C66 20 56 8 40 8z" fill="#5da870" stroke="#2d6a4f" stroke-width="2.5"/>
+      <polygon points="40,18 50,25 50,39 40,46 30,39 30,25" fill="rgba(255,255,255,.2)" stroke="#2d6a4f" stroke-width="1.2"/>
+      <path d="M40 18v28M30 25h20M30 39h20" stroke="#2d6a4f" stroke-width="1" opacity=".4"/>
+      <path d="M52 11Q64 4 61 16Q56 18 51 16Z" fill="#4a9a5e" stroke="#2d6a4f" stroke-width="1.8"/>
+      <circle cx="59" cy="10" r="2" fill="#2d6a4f"/>
+      <path d="M17 26Q4 19 6 30Q13 33 19 28Z" fill="none" stroke="#2d6a4f" stroke-width="2.2"/>
+      <path d="M63 26Q76 19 74 30Q67 33 61 28Z" fill="none" stroke="#2d6a4f" stroke-width="2.2"/>
+      <path d="M16 50Q4 58 8 67Q15 63 21 53Z" fill="none" stroke="#2d6a4f" stroke-width="2.2"/>
+      <path d="M64 50Q76 58 72 67Q65 63 59 53Z" fill="none" stroke="#2d6a4f" stroke-width="2.2"/>
+    </svg>
+    <div class="logo-t">Tourista</div>
+  </div>
+  <div class="sp"></div>
+  <button class="ni" onclick="go('notif')"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="ndot" id="ndot"></span></button>
+  <button class="ni" onclick="go('dashboard')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></button>
+  <button class="pbtn" onclick="go('post')">+ Post vlog</button>
+  <button class="avb" onclick="go('profile')">M</button>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tb on" id="tb-browse" onclick="go('browse')">Browse</div>
+  <div class="tb" id="tb-search" onclick="go('search')">Search</div>
+  <div class="tb" id="tb-detail" style="display:none"><span id="tbd-l">Vlog detail</span><span class="tx" onclick="closeT('detail')">×</span></div>
+  <div class="tb" id="tb-profile" style="display:none">Profile<span class="tx" onclick="closeT('profile')">×</span></div>
+  <div class="tb" id="tb-edit" style="display:none">Edit profile<span class="tx" onclick="closeT('edit')">×</span></div>
+  <div class="tb" id="tb-post" style="display:none">Post a vlog<span class="tx" onclick="closeT('post')">×</span></div>
+  <div class="tb" id="tb-dashboard" style="display:none">Dashboard<span class="tx" onclick="closeT('dashboard')">×</span></div>
+  <div class="tb" id="tb-notif" style="display:none">Notifications<span class="tx" onclick="closeT('notif')">×</span></div>
+</div>
+
+<!-- BROWSE -->
+<div class="page on" id="p-browse"><div class="w">
+  <div class="si"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input type="text" placeholder="Search destinations, vloggers..."></div>
+  <div class="clbl">Filter by vibe</div>
+  <div class="cg" id="cg1">
+    <span class="ch on" onclick="setC(this,'cg1')">All vlogs</span>
+    <span class="ch" onclick="setC(this,'cg1')">Beach &amp; islands</span>
+    <span class="ch" onclick="setC(this,'cg1')">Budget travel</span>
+    <span class="ch" onclick="setC(this,'cg1')">Adventure</span>
+    <span class="ch" onclick="setC(this,'cg1')">Food &amp; culture</span>
+    <span class="ch" onclick="setC(this,'cg1')">Solo travel</span>
+    <span class="ch" onclick="setC(this,'cg1')">Luxury</span>
+  </div>
+  <div class="slbl">Trending this week</div>
+  <div class="vl">
+    <div class="vr" onclick="openD('browse')"><div class="vth t1"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vi"><div class="vt">Siargao in 7 days — surfing, lagoons &amp; hidden local eats</div><div class="vm"><span>📍 Siargao, PH</span><span>₱12,500</span><span>★ 4.9</span></div><div style="display:flex;align-items:center;gap:6px"><div class="av ag">MR</div><span style="font-size:12px;color:var(--color-text-secondary)">MarisolRoams</span><span class="bx bc" style="margin-left:5px">✦ 2 credits</span></div></div></div>
+    <div class="vr"><div class="vth t2"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vi"><div class="vt">Kyoto weekend under ¥30,000 — budget temple guide</div><div class="vm"><span>📍 Kyoto, Japan</span><span>★ 4.7</span></div><div style="display:flex;align-items:center;gap:6px"><div class="av ac">TK</div><span style="font-size:12px;color:var(--color-text-secondary)">TravelWithKai</span><span class="bx bf" style="margin-left:5px">✓ Free</span></div></div></div>
+    <div class="vr" onclick="openD('browse')"><div class="vth t3"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vi"><div class="vt">Palawan island hopping — El Nido ultimate guide 2025</div><div class="vm"><span>📍 Palawan, PH</span><span>₱18,000</span><span>★ 5.0</span></div><div style="display:flex;align-items:center;gap:6px"><div class="av ab">EV</div><span style="font-size:12px;color:var(--color-text-secondary)">EloiseVoyage</span><span class="bx bc" style="margin-left:5px">✦ 3 credits</span></div></div></div>
+    <div class="vr"><div class="vth t4"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vi"><div class="vt">5 days in Hanoi &amp; Ha Long Bay — first timer's complete guide</div><div class="vm"><span>📍 Vietnam</span><span>★ 4.8</span></div><div style="display:flex;align-items:center;gap:6px"><div class="av ap">SL</div><span style="font-size:12px;color:var(--color-text-secondary)">SoloLensTrails</span><span class="bx bf" style="margin-left:5px">✓ Free</span></div></div></div>
+  </div>
+</div></div>
+
+<!-- SEARCH -->
+<div class="page" id="p-search"><div class="w">
+  <div class="si"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input type="text" placeholder="Country, city, or vlogger..."></div>
+  <div class="clbl">Filter by region</div>
+  <div class="cg" id="cg2"><span class="ch on" onclick="setC(this,'cg2')">All regions</span><span class="ch" onclick="setC(this,'cg2')">Philippines</span><span class="ch" onclick="setC(this,'cg2')">Japan</span><span class="ch" onclick="setC(this,'cg2')">Europe</span><span class="ch" onclick="setC(this,'cg2')">Americas</span></div>
+  <div class="clbl">Filter by budget</div>
+  <div class="cg" id="cg3"><span class="ch on" onclick="setC(this,'cg3')">Any budget</span><span class="ch" onclick="setC(this,'cg3')">Under ₱10k</span><span class="ch" onclick="setC(this,'cg3')">₱10k – ₱30k</span><span class="ch" onclick="setC(this,'cg3')">Above ₱30k</span><span class="ch" onclick="setC(this,'cg3')">Free vlogs only</span></div>
+  <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px">142 vlogs found</div>
+  <div class="vl">
+    <div class="vr" onclick="openD('search')"><div class="vth t1"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vi"><div class="vt">Siargao in 7 days — surfing, lagoons &amp; hidden local eats</div><div class="vm"><span>📍 Siargao, PH</span><span>₱12,500</span><span>★ 4.9</span></div><div style="display:flex;align-items:center;gap:6px"><div class="av ag">MR</div><span style="font-size:12px;color:var(--color-text-secondary)">MarisolRoams</span><span class="bx bc" style="margin-left:5px">✦ 2 credits</span></div></div></div>
+    <div class="vr"><div class="vth t2"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vi"><div class="vt">Kyoto weekend under ¥30,000 — budget temple guide</div><div class="vm"><span>📍 Kyoto, Japan</span><span>★ 4.7</span></div><div style="display:flex;align-items:center;gap:6px"><div class="av ac">TK</div><span style="font-size:12px;color:var(--color-text-secondary)">TravelWithKai</span><span class="bx bf" style="margin-left:5px">✓ Free</span></div></div></div>
+    <div class="vr" onclick="openD('search')"><div class="vth t3"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vi"><div class="vt">Palawan island hopping — El Nido ultimate guide 2025</div><div class="vm"><span>📍 Palawan, PH</span><span>₱18,000</span><span>★ 5.0</span></div><div style="display:flex;align-items:center;gap:6px"><div class="av ab">EV</div><span style="font-size:12px;color:var(--color-text-secondary)">EloiseVoyage</span><span class="bx bc" style="margin-left:5px">✦ 3 credits</span></div></div></div>
+  </div>
+</div></div>
+
+<!-- VLOG DETAIL -->
+<div class="page" id="p-detail"><div class="w">
+  <div class="bk" id="det-bk" onclick="go(prevF)"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg><span id="det-bk-l">Back to Browse</span></div>
+  <div class="vbox">
+    <div class="vpl t1"><div class="vbadge">Preview</div><div class="vpbig"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>
+    <div class="won">
+      <span>Watch on:</span>
+      <div class="pp"><span class="pdot" style="background:#f00"></span>YouTube ↗</div>
+      <div class="pp"><span class="pdot" style="background:#1877f2"></span>Facebook ↗</div>
+      <div class="pp"><span class="pdot" style="background:#111"></span>TikTok ↗</div>
+      <div class="pp"><span class="pdot" style="background:#e1306c"></span>Instagram ↗</div>
+      <span style="font-size:11px;color:var(--color-text-secondary);line-height:1.4">Same vlog · pick your platform</span>
+    </div>
+  </div>
+  <div class="dtt">Siargao in 7 days — surfing, lagoons &amp; hidden local eats</div>
+  <div class="dvl" onclick="openProfile()">
+    <div class="av ag" style="width:34px;height:34px;font-size:11px">MR</div>
+    <div><div class="dvln">MarisolRoams <span class="bx bf" style="font-size:10px">✓ Verified</span></div><div class="dvls">48 vlogs · 12.4k followers</div></div>
+    <button class="fbtn" id="det-f" onclick="event.stopPropagation();tFollow(this)">Follow</button>
+  </div>
+  <div class="s4"><div class="sb"><div class="sv">₱12,500</div><div class="sl">Total cost</div></div><div class="sb"><div class="sv">7 days</div><div class="sl">Duration</div></div><div class="sb"><div class="sv">★ 4.9</div><div class="sl">Rating</div></div><div class="sb"><div class="sv">3.2k</div><div class="sl">Views</div></div></div>
+  <div class="dd">A complete 7-day guide covering Cloud 9 surf breaks at sunrise, Sugba Lagoon, Naked Island, and local warungs that don't appear on any tourist map. Real budget, real tips, zero sponsorships.</div>
+  <!-- ENGAGEMENT ABOVE REVIEWS -->
+  <div class="eng">
+    <button class="eb" id="lbtn" onclick="tLike()"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg><span id="lcnt">348</span></button>
+    <button class="eb"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>64</button>
+    <button class="eb"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share</button>
+    <button class="eb"><svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>Save</button>
+  </div>
+  <div class="ulb" id="ulb">
+    <div class="ulh"><div class="uln">Unlock full itinerary</div><div class="ulp">2 credits</div></div>
+    <div class="uld">Get Day 3–7 costs, descriptions, booking contacts &amp; exclusive clips from MarisolRoams.</div>
+    <button class="ulc" onclick="doUnlock()">Unlock for 2 credits — ₱20</button>
+  </div>
+  <div class="slbl" style="margin-bottom:10px">Day-by-day itinerary</div>
+  <div class="id"><div class="ir1"><div class="iday">Day 1</div><div class="inn">Arrival + General Luna exploration</div><div class="ico">₱1,800</div></div><div class="idc">Rent scooter ₱400/day, hostel ₱600, market dinner at Kermit. Sunset walk at Union Beach.</div><div class="iclr"><div class="icth t1"><div class="icp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><span class="iclbl">1:42 clip — arrival day highlights</span></div></div>
+  <div class="id"><div class="ir1"><div class="iday">Day 2</div><div class="inn">Cloud 9 surf + Magpupungko tide pools</div><div class="ico">₱2,100</div></div><div class="idc">Sunrise at Cloud 9 boardwalk. Surf lesson ₱800 inc. board. Tide pools 7–9am low tide only.</div><div class="iclr"><div class="icth t2"><div class="icp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><span class="iclbl">2:14 clip — surfing &amp; tide pools</span></div></div>
+  <div class="id" id="it3" style="opacity:.4"><div class="ir1"><div class="iday" style="color:var(--color-text-secondary)">Day 3</div><div class="inn">Sugba Lagoon full day tour</div></div><div class="ilk"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Unlock to see cost, description &amp; clip</div></div>
+  <div class="id" id="it4" style="opacity:.4;margin-bottom:18px"><div class="ir1"><div class="iday" style="color:var(--color-text-secondary)">Day 4–7</div><div class="inn">Island hopping, hidden beaches &amp; departure</div></div><div class="ilk"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Unlock 4 days with costs &amp; clips</div></div>
+  <div class="rlbl">Reviews (128)</div>
+  <div class="ri"><div class="rh"><div class="av ap" style="width:26px;height:26px;font-size:9px">JP</div><div class="rn">Janna P.</div><div class="rs">★★★★★</div><div class="rt">2 wk ago</div></div><div class="rtx">Cost estimates were spot-on. The hidden food spots were incredible. Worth every credit!</div></div>
+  <div class="ri"><div class="rh"><div class="av ac" style="width:26px;height:26px;font-size:9px">RG</div><div class="rn">Rico G.</div><div class="rs">★★★★☆</div><div class="rt">1 mo ago</div></div><div class="rtx">100% authentic, no sponsorships. The clips per day helped me visualize the trip before going.</div></div>
+  <div class="rir"><input class="rin" type="text" placeholder="Share your experience..."><button class="rsb">Post</button></div>
+</div></div>
+
+<!-- PROFILE -->
+<div class="page" id="p-profile"><div class="w" style="padding-top:0">
+  <div style="border:0.5px solid var(--color-border-tertiary);border-radius:12px;overflow:hidden;margin-top:20px">
+    <div class="pcv" style="background:#1f4d36"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:44px;opacity:.1">🌿</div></div>
+    <div class="pbar">
+      <div class="pavw"><div class="pavi">M</div></div>
+      <div style="flex:1;padding-bottom:2px"><div class="pn">MarisolRoams</div><div class="ps">✓ Verified · Philippines · 12.4k followers</div></div>
+      <div class="pac">
+        <button class="edbtn" onclick="go('edit')"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit profile</button>
+        <button class="fbtn" id="pf-f" onclick="tFollow(this)">Follow</button>
+      </div>
+    </div>
+    <div class="ptbs"><div class="pt on" onclick="ptSw(this)">Vlogs</div><div class="pt" onclick="ptSw(this)">About</div><div class="pt" onclick="ptSw(this)">Reviews</div></div>
+    <div class="pstats"><div class="pst"><div class="psv">48</div><div class="psl">Vlogs</div></div><div class="pst"><div class="psv">4.8</div><div class="psl">Avg rating</div></div><div class="pst"><div class="psv">38k</div><div class="psl">Views</div></div><div class="pst"><div class="psv">432</div><div class="psl">Credits</div></div></div>
+    <div class="vg">
+      <div class="vgc" onclick="openD('profile')"><div class="vgth t1"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vgi"><div class="vgn">Siargao in 7 days</div><div class="vgm">3.2k views · ✦ 2 credits</div></div></div>
+      <div class="vgc"><div class="vgth t2"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vgi"><div class="vgn">Cebu island hopping ₱8k</div><div class="vgm">2.1k views · ✓ Free</div></div></div>
+      <div class="vgc"><div class="vgth t5"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vgi"><div class="vgn">Batanes hidden secret</div><div class="vgm">4.5k views · ✦ 3 credits</div></div></div>
+      <div class="vgc"><div class="vgth t3"><div class="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div><div class="vgi"><div class="vgn">Palawan budget guide</div><div class="vgm">6.1k views · ✦ 2 credits</div></div></div>
+    </div>
+  </div>
+</div></div>
+
+<!-- EDIT PROFILE -->
+<div class="page" id="p-edit"><div class="w">
+  <div style="font-size:21px;font-weight:700;margin-bottom:4px">Edit profile</div>
+  <div style="font-size:13.5px;color:var(--color-text-secondary);margin-bottom:18px">Update how tourists and vloggers see you</div>
+  <div class="ecv"><div class="ecvb">Change cover photo</div></div>
+  <div class="eav"><div class="efav">M<div class="efavc">+</div></div><div style="font-size:13px;color:var(--color-text-secondary)">Tap to change profile photo</div></div>
+  <div class="fg"><label>Display name</label><input class="fi" type="text" value="MarisolRoams"></div>
+  <div class="fg"><label>Tagline</label><input class="fi" type="text" value="Budget travel, island life &amp; authentic food finds"></div>
+  <div class="fg"><label>About you</label><textarea class="fi">Real trips, real costs — no sponsorships. 48 vlogs and counting.</textarea></div>
+  <div class="fr"><div class="fg"><label>Country / base</label><select class="fi"><option selected>Philippines</option><option>Japan</option></select></div><div class="fg"><label>Travel style</label><select class="fi"><option selected>Budget</option><option>Luxury</option></select></div></div>
+  <div class="fg"><label>Social links (optional)</label>
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <div class="xr"><span class="xd" style="background:#f00"></span><input class="xi" type="text" placeholder="YouTube channel link"></div>
+      <div class="xr"><span class="xd" style="background:#e1306c"></span><input class="xi" type="text" placeholder="Instagram profile"></div>
+      <div class="xr"><span class="xd" style="background:#111"></span><input class="xi" type="text" placeholder="TikTok profile"></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:9px;justify-content:flex-end;padding-top:14px;border-top:0.5px solid var(--color-border-tertiary)">
+    <button class="bb" onclick="go('profile')">Cancel</button><button class="nb" onclick="go('profile')">Save changes</button>
+  </div>
+</div></div>
+
+<!-- POST VLOG -->
+<div class="page" id="p-post"><div class="w">
+  <div style="font-size:21px;font-weight:700;margin-bottom:4px">Post a vlog</div>
+  <div style="font-size:13.5px;color:var(--color-text-secondary);margin-bottom:20px">Share your journey. Earn when tourists unlock your itinerary.</div>
+  <div class="steps">
+    <div class="si2"><div class="sd ac" id="sd1">1</div><div class="sl2 ac" id="sl1">Video &amp; info</div></div>
+    <div class="sln" id="sln1"></div>
+    <div class="si2"><div class="sd" id="sd2">2</div><div class="sl2" id="sl2">Itinerary</div></div>
+    <div class="sln" id="sln2"></div>
+    <div class="si2"><div class="sd" id="sd3">3</div><div class="sl2" id="sl3">Credits &amp; publish</div></div>
+  </div>
+  <div class="sc on" id="sc1">
+    <div class="vlbx">
+      <div style="font-size:14px;font-weight:500;margin-bottom:4px">Paste your video link</div>
+      <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">Add a link from YouTube, Facebook, TikTok, or Instagram. Tourists watch a preview here on Tourista and tap to view the full post on your platform.</div>
+      <div class="vlbr"><input class="vli" id="vlin" type="text" placeholder="e.g. https://youtube.com/watch?v=..." oninput="detP(this.value)"><button class="vlbb">Add</button></div>
+      <div class="detp" id="detp" style="display:none"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span id="detpt">YouTube link detected</span></div>
+      <div class="aml" onclick="document.getElementById('xls').classList.toggle('on')">+ Add same vlog from another platform (optional)</div>
+      <div class="xls" id="xls">
+        <div class="xr"><span class="xd" style="background:#1877f2"></span><input class="xi" type="text" placeholder="Facebook link (same vlog)"></div>
+        <div class="xr"><span class="xd" style="background:#111"></span><input class="xi" type="text" placeholder="TikTok link (same vlog)"></div>
+        <div class="xr"><span class="xd" style="background:#e1306c"></span><input class="xi" type="text" placeholder="Instagram Reel (same vlog)"></div>
+      </div>
+    </div>
+    <div class="fg"><label>Vlog title</label><input class="fi" type="text" placeholder="e.g. Siargao in 7 days — surfing, lagoons &amp; local eats"></div>
+    <div class="fg"><label>Description</label><textarea class="fi" placeholder="Tell tourists what makes this trip special. Be honest about costs, highlights, and challenges."></textarea></div>
+    <div class="fg"><label>Cover photo</label><div style="height:88px;border-radius:9px;border:0.5px dashed var(--color-border-secondary);display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;background:var(--color-background-secondary)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span style="font-size:13px;color:var(--color-text-secondary)">Upload cover (or auto-detected from video)</span></div></div>
+    <div class="fr"><div class="fg"><label>Country</label><select class="fi"><option>Philippines</option><option>Japan</option></select></div><div class="fg"><label>City / location</label><input class="fi" type="text" placeholder="e.g. Siargao Island"></div></div>
+    <div class="fr"><div class="fg"><label>Total cost</label><input class="fi" type="text" placeholder="e.g. ₱12,500"></div><div class="fg"><label>Duration</label><input class="fi" type="text" placeholder="e.g. 7 days"></div></div>
+  </div>
+  <div class="sc" id="sc2">
+    <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:13px;line-height:1.6">Add each day of your trip with a cost and optional clip. Days 1–2 are always free. Later days can be set to Locked to earn credits.</div>
+    <div id="ibw">
+      <div class="ibr"><span class="ibd">D1</span><input class="ibin" type="text" placeholder="Day 1 activity..."><input class="ibco" type="text" placeholder="₱ cost"><span class="tog tgf" style="margin-left:4px">Free</span><button class="tog tgf" style="margin-left:4px">+ Clip</button></div>
+      <div class="ibr"><span class="ibd">D2</span><input class="ibin" type="text" placeholder="Day 2 activity..."><input class="ibco" type="text" placeholder="₱ cost"><span class="tog tgf" style="margin-left:4px">Free</span><button class="tog tgf" style="margin-left:4px">+ Clip</button></div>
+      <div class="ibr"><span class="ibd">D3</span><input class="ibin" type="text" placeholder="Day 3 activity..."><input class="ibco" type="text" placeholder="₱ cost"><button class="tog tgl" onclick="tDay(this)" style="margin-left:4px">🔒 Locked</button><button class="tog tgf" style="margin-left:4px">+ Clip</button></div>
+    </div>
+    <div class="ibadd" onclick="addDay()">+ Add another day</div>
+  </div>
+  <div class="sc" id="sc3">
+    <div class="fg"><label>Credits to unlock your full itinerary</label>
+      <div class="crc"><div class="crt"><span class="crl">Credits per tourist</span><span class="crv" id="crv">2 credits</span></div><input type="range" min="0" max="10" value="2" step="1" style="width:100%;accent-color:var(--g)" oninput="updCr(this.value)"><div class="cri" id="cri">At 2 credits · ₱20 per tourist · 80% to you = <strong>₱16</strong>. Est. 50 unlocks/month = <strong>₱800 passive income</strong></div></div>
+    </div>
+    <div style="padding:12px;border:0.5px solid var(--color-border-tertiary);border-radius:10px;font-size:13px;line-height:1.7;color:var(--color-text-secondary)"><strong style="color:var(--color-text-primary);display:block;margin-bottom:5px">Ready to publish?</strong>Your vlog will be reviewed before going live. We check for authentic content, accurate costs &amp; clear itinerary. Usually under 24 hours.</div>
+  </div>
+  <div class="ff">
+    <button class="bb" onclick="prevStep()">← Back</button>
+    <div style="display:flex;gap:8px"><button class="bb">Save draft</button><button class="nb" id="nxbtn" onclick="nextStep()">Continue →</button></div>
+  </div>
+</div></div>
+
+<!-- DASHBOARD -->
+<div class="page" id="p-dashboard"><div class="w">
+  <div style="font-size:21px;font-weight:700;margin-bottom:3px">Good morning, <span style="color:var(--g)">Marisol</span></div>
+  <div style="font-size:14px;color:var(--color-text-secondary);margin-bottom:18px">Your vlog performance this month</div>
+  <div class="kpig"><div class="kp"><div class="kpl">Earnings</div><div class="kpv" style="color:var(--am)">₱4,320</div><div class="kpc up">↑ +18%</div></div><div class="kp"><div class="kpl">Credits</div><div class="kpv">432</div><div class="kpc up">↑ +64</div></div><div class="kp"><div class="kpl">Views</div><div class="kpv">38.4k</div><div class="kpc up">↑ +2.1k</div></div><div class="kp"><div class="kpl">Vlogs</div><div class="kpv">48</div><div class="kpc dw">2 in review</div></div></div>
+  <div style="margin-bottom:20px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:14px;font-weight:500">Monthly earnings</span><span style="font-size:12px;color:var(--color-text-secondary)">Oct: 86 unlocks</span></div><div class="ca"><div class="brs"><div class="bar" style="height:28%"></div><div class="bar" style="height:40%"></div><div class="bar" style="height:32%"></div><div class="bar" style="height:55%"></div><div class="bar" style="height:47%"></div><div class="bar" style="height:66%"></div><div class="bar" style="height:51%"></div><div class="bar" style="height:76%"></div><div class="bar" style="height:62%"></div><div class="bar hi" style="height:94%"></div></div><div class="blbs"><div class="blb">Jan</div><div class="blb">Feb</div><div class="blb">Mar</div><div class="blb">Apr</div><div class="blb">May</div><div class="blb">Jun</div><div class="blb">Jul</div><div class="blb">Aug</div><div class="blb">Sep</div><div class="blb">Oct</div></div></div></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:14px;font-weight:500">My vlogs</span><button class="nb" style="font-size:12px;padding:7px 13px" onclick="go('post')">+ New vlog</button></div>
+  <div class="vl2"><div class="vr2" onclick="openD('dashboard')"><div class="vt2 t1"></div><div><div class="vn2">Siargao in 7 days</div><span class="vs2">3,248 views · 86 unlocks · ★ 4.9</span></div><span class="st sl3">Live</span></div><div class="vr2"><div class="vt2 t2"></div><div><div class="vn2">Cebu island hopping ₱8,000</div><span class="vs2">2,104 views · free vlog</span></div><span class="st sl3">Live</span></div><div class="vr2"><div class="vt2 t5"></div><div><div class="vn2">Batanes: best-kept secret</div><span class="vs2">Draft — 60% complete</span></div><span class="st sd2">Draft</span></div><div class="vr2"><div class="vt2 t3"></div><div><div class="vn2">Palawan budget guide 2025</div><span class="vs2">Submitted for review</span></div><span class="st sr2">In review</span></div></div>
+</div></div>
+
+<!-- NOTIFICATIONS -->
+<div class="page" id="p-notif"><div class="w">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:15px"><span style="font-size:20px;font-weight:700">Notifications</span><span style="font-size:13px;color:var(--g);cursor:pointer" onclick="clrAll()">Mark all read</span></div>
+  <div class="nl">
+    <div class="nr ur" id="n1" onclick="rdN('n1')"><div class="nic" style="background:var(--al)">✦</div><div><div class="ntx"><strong>Janna P.</strong> unlocked "Siargao in 7 days" — you earned ₱16</div><div class="ntm">12 minutes ago</div></div><div class="nd2"></div></div>
+    <div class="nr ur" id="n2" onclick="rdN('n2')"><div class="nic" style="background:#f5f0ff">★</div><div><div class="ntx"><strong>Rico G.</strong> left a 5-star review — "Totally worth the credits!"</div><div class="ntm">3 hours ago</div></div><div class="nd2"></div></div>
+    <div class="nr ur" id="n3" onclick="rdN('n3')"><div class="nic" style="background:var(--gl)">👤</div><div><div class="ntx"><strong>Ana Cruz</strong> and 3 others started following you</div><div class="ntm">Yesterday</div></div><div class="nd2"></div></div>
+    <div class="nr ur" id="n4" onclick="rdN('n4')"><div class="nic" style="background:var(--al)">✦</div><div><div class="ntx"><strong>Mark T.</strong> unlocked "Siargao in 7 days" — you earned ₱16</div><div class="ntm">Yesterday</div></div><div class="nd2"></div></div>
+    <div class="nr"><div class="nic" style="background:var(--color-background-secondary)">📈</div><div><div class="ntx">"Cebu island hopping" is trending in PH — 408 new views this week</div><div class="ntm">2 days ago</div></div></div>
+  </div>
+</div></div>
+
+<script>
+var prevF='browse',curStep=1,ibDays=3,nCnt=4,liked=false;
+var pgs={browse:'p-browse',search:'p-search',detail:'p-detail',profile:'p-profile',edit:'p-edit',post:'p-post',dashboard:'p-dashboard',notif:'p-notif'};
+var tbs={browse:'tb-browse',search:'tb-search',detail:'tb-detail',profile:'tb-profile',edit:'tb-edit',post:'tb-post',dashboard:'tb-dashboard',notif:'tb-notif'};
+var always=['browse','search'];
+function go(s){
+  if(!s||!pgs[s])return;
+  Object.values(pgs).forEach(id=>{var e=document.getElementById(id);if(e)e.classList.remove('on')});
+  document.getElementById(pgs[s]).classList.add('on');
+  Object.values(tbs).forEach(id=>{var e=document.getElementById(id);if(e)e.classList.remove('on')});
+  var t=document.getElementById(tbs[s]);
+  if(t){t.classList.add('on');if(!always.includes(s))t.style.display='';}
+  Object.keys(tbs).forEach(k=>{if(!always.includes(k)&&k!==s){var tt=document.getElementById(tbs[k]);if(tt)tt.style.display='none';}});
+  always.forEach(k=>{var tt=document.getElementById(tbs[k]);if(tt)tt.style.display='';});
+}
+function openD(from){
+  prevF=from;
+  document.getElementById('det-bk-l').textContent='Back to '+(from==='browse'?'Browse':from==='search'?'Search':from==='profile'?'Profile':'Dashboard');
+  document.getElementById(tbs.detail).style.display='';
+  go('detail');
+}
+function openProfile(){document.getElementById(tbs.profile).style.display='';go('profile');}
+function closeT(s){var t=document.getElementById(tbs[s]);if(t)t.style.display='none';go('browse');}
+function setC(el,grpId){var g=document.getElementById(grpId)||el.closest('.cg');if(!g)return;g.querySelectorAll('.ch').forEach(c=>c.classList.remove('on'));el.classList.add('on');}
+function tFollow(btn){var f=btn.classList.toggle('fol');btn.textContent=f?'Following':'Follow';var o=document.getElementById(btn.id==='det-f'?'pf-f':'det-f');if(o){o.classList.toggle('fol',f);o.textContent=f?'Following':'Follow';}}
+function tLike(){liked=!liked;var b=document.getElementById('lbtn'),c=document.getElementById('lcnt');b.classList.toggle('lk',liked);if(c)c.textContent=liked?349:348;}
+function doUnlock(){
+  var b=document.getElementById('ulb');
+  if(b){b.innerHTML='<div style="display:flex;align-items:center;gap:9px;color:var(--g);font-size:14px;font-weight:500"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>Full itinerary unlocked — enjoy your trip!</div>';b.style.background='var(--gl)';b.style.borderColor='var(--gm)';}
+  ['it3','it4'].forEach(id=>{var e=document.getElementById(id);if(e){e.style.opacity='1';var l=e.querySelector('.ilk');if(l)l.innerHTML='<span style="font-size:12px;color:var(--g)">✓ Cost, description &amp; clip now visible</span>';}});
+}
+function ptSw(el){el.closest('.ptbs').querySelectorAll('.pt').forEach(p=>p.classList.remove('on'));el.classList.add('on');}
+function nextStep(){
+  if(curStep>=3){go('dashboard');return;}
+  document.getElementById('sc'+curStep).classList.remove('on');
+  curStep++;
+  document.getElementById('sc'+curStep).classList.add('on');
+  if(curStep===3)document.getElementById('nxbtn').textContent='Publish →';
+  syncS();
+}
+function prevStep(){
+  if(curStep===1){go('browse');return;}
+  document.getElementById('sc'+curStep).classList.remove('on');
+  curStep--;
+  document.getElementById('sc'+curStep).classList.add('on');
+  document.getElementById('nxbtn').textContent='Continue →';
+  syncS();
+}
+function syncS(){
+  for(var i=1;i<=3;i++){
+    var d=document.getElementById('sd'+i),l=document.getElementById('sl'+i);
+    d.classList.remove('dn','ac');l.classList.remove('ac');
+    if(i<curStep){d.classList.add('dn');d.textContent='✓';}
+    else if(i===curStep){d.classList.add('ac');d.textContent=i;l.classList.add('ac');}
+    else d.textContent=i;
+    if(i<3){var ln=document.getElementById('sln'+i);if(ln)ln.classList.toggle('dn',i<curStep);}
+  }
+}
+function updCr(v){
+  v=parseInt(v);
+  var cv=document.getElementById('crv'),ci=document.getElementById('cri');
+  if(cv)cv.textContent=v===0?'Free (no credits)':v+(v===1?' credit':' credits');
+  if(ci){if(v===0)ci.innerHTML='Free vlog — great for building your audience.';else{var e=Math.round(v*10*.8);ci.innerHTML='At '+v+' credit'+(v>1?'s':'')+' · ₱'+(v*10)+' per tourist · 80% to you = <strong>₱'+e+'</strong>. Est. 50 unlocks/month = <strong>₱'+(e*50).toLocaleString()+' passive income</strong>';}}
+}
+function addDay(){
+  ibDays++;
+  var wrap=document.getElementById('ibw');
+  var add=wrap.querySelector('.ibadd');
+  var row=document.createElement('div');row.className='ibr';
+  row.innerHTML='<span class="ibd">D'+ibDays+'</span><input class="ibin" type="text" placeholder="Day '+ibDays+' activity..."><input class="ibco" type="text" placeholder="₱ cost"><button class="tog tgf" onclick="tDay(this)" style="margin-left:4px">✓ Free</button><button class="tog tgf" style="margin-left:4px">+ Clip</button>';
+  if(add)wrap.insertBefore(row,add);else wrap.appendChild(row);
+}
+function tDay(btn){if(btn.classList.contains('tgl')){btn.classList.replace('tgl','tgf');btn.textContent='✓ Free';}else{btn.classList.replace('tgf','tgl');btn.textContent='🔒 Locked';}}
+function detP(v){var d=document.getElementById('detp'),t=document.getElementById('detpt');if(!d||!t)return;if(v.includes('youtube')||v.includes('youtu.be')){t.textContent='YouTube link detected ✓';d.style.display='flex';}else if(v.includes('facebook')||v.includes('fb.com')){t.textContent='Facebook link detected ✓';d.style.display='flex';}else if(v.includes('tiktok')){t.textContent='TikTok link detected ✓';d.style.display='flex';}else if(v.includes('instagram')){t.textContent='Instagram link detected ✓';d.style.display='flex';}else d.style.display='none';}
+function rdN(id){var e=document.getElementById(id);if(!e||!e.classList.contains('ur'))return;e.classList.remove('ur');var d=e.querySelector('.nd2');if(d)d.remove();nCnt=Math.max(0,nCnt-1);upDot();}
+function clrAll(){document.querySelectorAll('.nr.ur').forEach(r=>{r.classList.remove('ur');var d=r.querySelector('.nd2');if(d)d.remove();});nCnt=0;upDot();}
+function upDot(){var d=document.getElementById('ndot');if(d)d.style.display=nCnt>0?'':'none';}
+upDot();
+</script>
