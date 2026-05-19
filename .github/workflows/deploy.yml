@@ -30,11 +30,19 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ec2-user/tourista
-            docker build -t ec2-next:latest -f Dockerfile .
+
+            docker ps -q --filter publish=80 | xargs -r docker rm -f
             docker rm -f tourista-app || true
+
+            docker build --no-cache -t ec2-next:latest -f Dockerfile .
+
+            docker ps -q --filter publish=80 | xargs -r docker rm -f
+            docker rm -f tourista-app || true
+
             docker run -d \
               --name tourista-app \
               --restart unless-stopped \
               -p 80:3000 \
               ec2-next:latest
+
             docker image prune -f
