@@ -548,48 +548,46 @@ export default function Home() {
                 Budget {budget !== 'Any budget' && <span className="fb-tab-count">{budget}</span>}
               </button>
             </div>
-            <div className="fb-tools">
-              <button className="fb-saves">
-                <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                Saves
-              </button>
-            </div>
           </div>
 
-          {/* Filter chips for selected category */}
-          {(vibe !== 'All vlogs' || region !== 'All regions' || budget !== 'Any budget') && (
-            <div className="filterbar-inner">
-              <div className="fb-chips">
-                {vibe !== 'All vlogs' && (
-                  <>
-                    {VIBES.map(v => (
-                      <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>
-                        {v}
-                      </span>
-                    ))}
-                  </>
-                )}
-                {region !== 'All regions' && (
-                  <>
-                    {REGIONS.map(r => (
-                      <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(r)}>
-                        {r}
-                      </span>
-                    ))}
-                  </>
-                )}
-                {budget !== 'Any budget' && (
-                  <>
-                    {BUDGETS.map(b => (
-                      <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(b)}>
-                        {b}
-                      </span>
-                    ))}
-                  </>
-                )}
-              </div>
+          {/* Filter chips - always show for current active category */}
+          <div className="filterbar-inner">
+            <div className="fb-chips">
+              {vibe === 'All vlogs' ? (
+                <>
+                  {VIBES.map(v => (
+                    <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>
+                      {v}
+                    </span>
+                  ))}
+                </>
+              ) : region === 'All regions' ? (
+                <>
+                  {REGIONS.map(r => (
+                    <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(r)}>
+                      {r}
+                    </span>
+                  ))}
+                </>
+              ) : budget === 'Any budget' ? (
+                <>
+                  {BUDGETS.map(b => (
+                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(b)}>
+                      {b}
+                    </span>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {VIBES.map(v => (
+                    <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>
+                      {v}
+                    </span>
+                  ))}
+                </>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
