@@ -447,13 +447,15 @@ textarea.fi{resize:vertical;min-height:84px;line-height:1.65}
 .fb-saves:hover{background:var(--gl);color:var(--g)}
 .fb-saves svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
+/* FILTER CHIPS WRAPPER */
+.filterbar-chips-wrapper{display:flex;align-items:center;gap:8px;padding:10px 0 14px;border-top:1px solid var(--color-border-tertiary)}
+
 /* FILTER CHIPS (with thumbnails) */
-.fb-chips{display:flex;gap:8px;padding:10px 0 14px;overflow:hidden;border-top:1px solid var(--color-border-tertiary);flex:1}
-.fb-chip{display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:24px;cursor:pointer;flex-shrink:0;transition:all .12s;font-size:13px;font-weight:500;color:var(--color-text-primary);white-space:nowrap}
+.fb-chips{display:flex;gap:8px;overflow:hidden;flex:1}
+.fb-chip{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:20px;cursor:pointer;flex-shrink:0;transition:all .12s;font-size:13px;font-weight:500;color:var(--color-text-primary);white-space:nowrap}
 .fb-chip:hover{border-color:var(--g);background:var(--gp)}
 .fb-chip.on{border-color:var(--g);background:var(--gp);color:var(--g1);font-weight:600;box-shadow:0 0 0 1px var(--g)}
-.fb-chip-thumb{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;color:#fff;font-weight:700;overflow:hidden}
-.fb-chip-thumb img{width:100%;height:100%;object-fit:cover}
+.fb-chip-img{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background-size:cover;background-position:center}
 .fb-arrow{width:32px;height:32px;border-radius:50%;background:var(--color-background-primary);border:1px solid var(--color-border-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .12s;color:var(--color-text-secondary)}
 .fb-arrow:hover{background:var(--gl);color:var(--g);border-color:var(--g)}
 .fb-arrow svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}

@@ -52,7 +52,7 @@ const defaultItinDays: ItineraryFormDay[] = [
   { day: 3, activity: '', cost: '', locked: true, expanded: false },
 ]
 
-const VIBES = ['Beach & islands','Mountain hiking','City break','Budget travel','Luxury travel','Adventure sports','Food & culture','Solo travel','Family trip','Road trip','Backpacking','Island hopping','Cultural immersion','Wildlife & nature','Photography spots','Nightlife','Wellness & spa','Historical sites']
+const VIBES = ['Beach & islands','Mountain hiking','City break','Adventure sports','Food & culture','Solo travel','Family trip','Road trip','Backpacking','Island hopping','Cultural immersion','Wildlife & nature','Photography spots','Nightlife','Wellness & spa','Historical sites']
 const REGIONS = ['All regions','Philippines','Japan','Southeast Asia','Europe','Americas']
 const BUDGETS = ['Any budget','Under ₱10k','₱10k – ₱30k','Above ₱30k','Free vlogs only']
 
@@ -552,7 +552,7 @@ export default function Home() {
           </div>
 
           {/* Filter chips - show only for active tab */}
-          <div className="filterbar-inner">
+          <div className="filterbar-chips-wrapper">
             <button className="fb-arrow fb-arrow-left" aria-label="Scroll left">
               <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
@@ -560,7 +560,8 @@ export default function Home() {
               {activeFilterTab === 'vibe' && (
                 <>
                   {VIBES.map(v => (
-                    <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>
+                    <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(vibe === v ? 'All vlogs' : v)}>
+                      <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%232A7A50" width="100" height="100"/></svg>')`}}/>
                       {v}
                     </span>
                   ))}
@@ -569,7 +570,8 @@ export default function Home() {
               {activeFilterTab === 'region' && (
                 <>
                   {REGIONS.map(r => (
-                    <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(r)}>
+                    <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(region === r ? 'All regions' : r)}>
+                      <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%230876A8"/></svg>')`}}/>
                       {r}
                     </span>
                   ))}
@@ -578,7 +580,8 @@ export default function Home() {
               {activeFilterTab === 'budget' && (
                 <>
                   {BUDGETS.map(b => (
-                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(b)}>
+                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(budget === b ? 'Any budget' : b)}>
+                      <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23D08A0A" width="100" height="100"/></svg>')`}}/>
                       {b}
                     </span>
                   ))}
