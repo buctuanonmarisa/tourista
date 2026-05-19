@@ -19,6 +19,8 @@ interface VlogCard {
   id: string; title: string; location: string; cost?: number | null
   currency: string; rating: number; views: number; likes: number
   credits: number; thumbnailColor: string; trending: boolean; author: VlogAuthor
+  description?: string | null; youtubeUrl?: string | null; facebookUrl?: string | null
+  tiktokUrl?: string | null; instagramUrl?: string | null; duration?: number | null
 }
 interface VlogDetail extends VlogCard {
   country: string; region: string; vibe: string; duration?: number | null
@@ -65,6 +67,8 @@ export default function Home() {
   const [region, setRegion] = useState('All regions')
   const [budget, setBudget] = useState('Any budget')
   const [filtersOpen, setFiltersOpen] = useState(true)
+  const [activeFeedId, setActiveFeedId] = useState<string | null>(null)
+  const feedRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   /* ─── Data ─── */
   const [vlogs, setVlogs] = useState<VlogCard[]>([])
@@ -157,6 +161,27 @@ export default function Home() {
   useEffect(() => { fetchVlogs() }, [fetchVlogs])
   useEffect(() => { fetchMyVlogs() }, [fetchMyVlogs])
   useEffect(() => { fetchProfile() }, [fetchProfile])
+  useEffect(() => {
+    if (!vlogs.length) return
+    setActiveFeedId(current => current ?? vlogs[0]?.id ?? null)
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+
+      if (visible?.target instanceof HTMLElement) {
+        setActiveFeedId(visible.target.dataset.vlogId || null)
+      }
+    }, { threshold: [0.55, 0.75], rootMargin: '-12% 0px -18%' })
+
+    vlogs.forEach(v => {
+      const node = feedRefs.current[v.id]
+      if (node) observer.observe(node)
+    })
+
+    return () => observer.disconnect()
+  }, [vlogs])
 
   /* ══════════════════════════════════════════
      Navigation
@@ -182,6 +207,10 @@ export default function Home() {
     const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\s?]+)/)
     if (yt) return `https://www.youtube.com/embed/${yt[1]}?controls=1&rel=0`
     return null
+  }
+  const getFeedEmbedUrl = (v: VlogCard) => {
+    const base = v.youtubeUrl ? getEmbedUrl(v.youtubeUrl) : null
+    return base ? `${base}&autoplay=1&mute=1&playsinline=1` : null
   }
 
   const detectVideo = (url: string) => {
@@ -479,6 +508,33 @@ export default function Home() {
         </div>
       </div>
 
+      <aside className="side-rail" aria-label="Primary navigation">
+        <button className={`side-btn${page === 'browse' ? ' on' : ''}`} data-tooltip="Explore" onClick={() => go('browse')} aria-label="Explore">
+          <svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-12A7 7 0 0 0 5 9c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        </button>
+        <button className={`side-btn${filtersOpen && page === 'browse' ? ' on' : ''}`} data-tooltip="Filters" onClick={() => page === 'browse' ? setFiltersOpen(o => !o) : go('browse')} aria-label="Filters">
+          <svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        </button>
+        <button className={`side-btn${page === 'notif' ? ' on' : ''}`} data-tooltip="Notifications" onClick={() => go('notif')} aria-label="Notifications">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          {nCnt > 0 && <span className="ndot"/>}
+        </button>
+        <button className={`side-btn${page === 'dashboard' ? ' on' : ''}`} data-tooltip="Dashboard" onClick={() => go('dashboard')} aria-label="Dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        </button>
+        <button className="side-btn post" data-tooltip="Post a vlog" onClick={() => {
+          setPostForm({ ...defaultPostForm })
+          setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' })
+          setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError('')
+          setVibeInput(''); setVibeFocused(false)
+          setPostView('form')
+          go('post')
+        }} aria-label="Post a vlog">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button className={`side-avatar${page === 'profile' ? ' on' : ''}`} data-tooltip="Profile" onClick={() => go('profile')} aria-label="Profile">{profile?.initials || 'M'}</button>
+      </aside>
+
       {/* ── TABS ──────────────────────────────── */}
       <div className="tabs">
         <div className="tabs-inner">
@@ -554,11 +610,24 @@ export default function Home() {
             {vlogs.length === 0 ? (
               <div className="vl-empty">No vlogs found — try adjusting your filters.</div>
             ) : (
-              <div className="vl">
-                {vlogs.map(v => (
-                  <div key={v.id} className="vr" onClick={() => openD('browse', v.id)}>
-                    <div className={`vth ${v.thumbnailColor}`}>
-                      <div className="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+              <div className="vl feed-videos">
+                {vlogs.map(v => {
+                  const isActive = activeFeedId === v.id
+                  const feedEmbed = isActive ? getFeedEmbedUrl(v) : null
+                  return (
+                  <div
+                    key={v.id}
+                    className="vr feed-card"
+                    data-vlog-id={v.id}
+                    ref={node => { feedRefs.current[v.id] = node }}
+                    onClick={() => openD('browse', v.id)}
+                  >
+                    <div className={`vth feed-video ${v.thumbnailColor}`}>
+                      {feedEmbed ? (
+                        <iframe src={feedEmbed} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={v.title}/>
+                      ) : (
+                        <div className="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+                      )}
                     </div>
                     <div className="vi">
                       <div className="vt">{v.title}</div>
@@ -576,7 +645,8 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

@@ -9,3 +9,18 @@ node_modules/
 
 # TypeScript
 tsconfig.tsbuildinfo
+
+# Design references
+pleasant-pages-main/
+
+.claude/
+.codex/
+AGENTS.md
+CLAUDE.md
+Tourista_Pitch_Deck.pptx
+dev.log
+graphify-out/
+tourista-kp.pem
+tourista_pitch.html
+vlog details issue.png
+vlog details.png
