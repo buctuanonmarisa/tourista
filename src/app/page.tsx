@@ -66,6 +66,7 @@ export default function Home() {
   const [vibe, setVibe] = useState('All vlogs')
   const [region, setRegion] = useState('All regions')
   const [budget, setBudget] = useState('Any budget')
+  const [activeFilterTab, setActiveFilterTab] = useState<'vibe' | 'region' | 'budget'>('vibe')
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [activeFeedId, setActiveFeedId] = useState<string | null>(null)
   const feedRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -538,46 +539,25 @@ export default function Home() {
         <div className="filterbar">
           <div className="filterbar-inner">
             <div className="fb-tabs">
-              <button className={`fb-tab${vibe === 'All vlogs' ? '' : ' on'}`} onClick={() => setVibe('All vlogs')}>
+              <button className={`fb-tab${activeFilterTab === 'vibe' ? ' on' : ''}`} onClick={() => setActiveFilterTab('vibe')}>
                 Vibe {vibe !== 'All vlogs' && <span className="fb-tab-count">{vibe}</span>}
               </button>
-              <button className={`fb-tab${region === 'All regions' ? '' : ' on'}`} onClick={() => setRegion('All regions')}>
+              <button className={`fb-tab${activeFilterTab === 'region' ? ' on' : ''}`} onClick={() => setActiveFilterTab('region')}>
                 Region {region !== 'All regions' && <span className="fb-tab-count">{region}</span>}
               </button>
-              <button className={`fb-tab${budget === 'Any budget' ? '' : ' on'}`} onClick={() => setBudget('Any budget')}>
+              <button className={`fb-tab${activeFilterTab === 'budget' ? ' on' : ''}`} onClick={() => setActiveFilterTab('budget')}>
                 Budget {budget !== 'Any budget' && <span className="fb-tab-count">{budget}</span>}
               </button>
             </div>
           </div>
 
-          {/* Filter chips - always show for current active category */}
+          {/* Filter chips - show only for active tab */}
           <div className="filterbar-inner">
+            <button className="fb-arrow fb-arrow-left" aria-label="Scroll left">
+              <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
             <div className="fb-chips">
-              {vibe === 'All vlogs' ? (
-                <>
-                  {VIBES.map(v => (
-                    <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>
-                      {v}
-                    </span>
-                  ))}
-                </>
-              ) : region === 'All regions' ? (
-                <>
-                  {REGIONS.map(r => (
-                    <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(r)}>
-                      {r}
-                    </span>
-                  ))}
-                </>
-              ) : budget === 'Any budget' ? (
-                <>
-                  {BUDGETS.map(b => (
-                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(b)}>
-                      {b}
-                    </span>
-                  ))}
-                </>
-              ) : (
+              {activeFilterTab === 'vibe' && (
                 <>
                   {VIBES.map(v => (
                     <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>
@@ -586,7 +566,28 @@ export default function Home() {
                   ))}
                 </>
               )}
+              {activeFilterTab === 'region' && (
+                <>
+                  {REGIONS.map(r => (
+                    <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(r)}>
+                      {r}
+                    </span>
+                  ))}
+                </>
+              )}
+              {activeFilterTab === 'budget' && (
+                <>
+                  {BUDGETS.map(b => (
+                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(b)}>
+                      {b}
+                    </span>
+                  ))}
+                </>
+              )}
             </div>
+            <button className="fb-arrow fb-arrow-right" aria-label="Scroll right">
+              <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
           </div>
         </div>
       )}
@@ -611,7 +612,21 @@ export default function Home() {
                       className={`gi-card${isActive ? ' on' : ''}`}
                       data-vlog-id={v.id}
                       ref={node => { feedRefs.current[v.id] = node }}
-                      onClick={() => openD('browse', v.id)}
+                      onClick={async () => {
+                        setActiveFeedId(v.id)
+                        setUnlocked(false)
+                        setReviewText('')
+                        setVlogLoading(true)
+                        try {
+                          const r = await fetch(`/api/vlogs/${v.id}`)
+                          const d: VlogDetail = await r.json()
+                          setVlog(d)
+                          setLikeCount(d.likes)
+                          setLiked(false)
+                        } finally {
+                          setVlogLoading(false)
+                        }
+                      }}
                     >
                       <div className={`gi-thumb ${v.thumbnailColor}`}>
                         {feedEmbed ? (
