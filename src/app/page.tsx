@@ -475,178 +475,256 @@ export default function Home() {
     <>
       <h2 className="sr-only">Tourista — travel vlog portal</h2>
 
-      {/* ── NAV ───────────────────────────────── */}
-      <div className="nav">
-        <div className="nav-inner">
-          <div className="logo" onClick={() => go('browse')}>
-            <svg width="26" height="30" viewBox="0 0 80 90" fill="none">
+      {/* ── NEW TOP NAVIGATION BAR ───────────────────────────────── */}
+      <div className="topnav">
+        <div className="topnav-inner">
+          {/* Logo */}
+          <div className="tn-logo" onClick={() => go('browse')}>
+            <svg width="24" height="28" viewBox="0 0 80 90" fill="none">
               <path d="M40 8C24 8 14 20 14 34c0 18 26 46 26 46S66 52 66 34C66 20 56 8 40 8z" fill="#5dba7a" stroke="#2A7A50" strokeWidth="2.5"/>
               <polygon points="40,18 50,25 50,39 40,46 30,39 30,25" fill="rgba(255,255,255,.2)" stroke="#2A7A50" strokeWidth="1.2"/>
               <path d="M40 18v28M30 25h20M30 39h20" stroke="#2A7A50" strokeWidth="1" opacity=".4"/>
               <path d="M52 11Q64 4 61 16Q56 18 51 16Z" fill="#4aaa62" stroke="#2A7A50" strokeWidth="1.8"/>
               <circle cx="59" cy="10" r="2" fill="#2A7A50"/>
             </svg>
-            <div className="logo-t">Tourista</div>
+            <div className="tn-logo-t">Tourista</div>
           </div>
-          <div className="sp"/>
-          <button className="ni" data-tooltip="Notifications" onClick={() => go('notif')} aria-label="Notifications">
-            <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            {nCnt > 0 && <span className="ndot" id="ndot"/>}
-          </button>
-          <button className="ni" data-tooltip="Dashboard" onClick={() => go('dashboard')} aria-label="Dashboard">
-            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-          </button>
-          <button className="pbtn" data-tooltip="Post a vlog" onClick={() => {
-            setPostForm({ ...defaultPostForm })
-            setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' })
-            setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError('')
-            setVibeInput(''); setVibeFocused(false)
-            setPostView('form')
-            go('post')
-          }}>+ Post vlog</button>
-          <button className="avb" data-tooltip="Profile" onClick={() => go('profile')}>{profile?.initials || 'M'}</button>
+
+          {/* Search Bar */}
+          <div className="tn-search">
+            <div className="tn-search-icon">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            </div>
+            <input type="text" placeholder="Search destinations, vloggers..." value={search}
+              onChange={e => setSearch(e.target.value)}/>
+            {search && (
+              <button className="tn-search-clear" onClick={() => setSearch('')}>
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="tn-actions">
+            <button className="tn-btn" onClick={() => go('notif')} aria-label="Notifications">
+              <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span className="tn-btn-label">Notifications</span>
+              {nCnt > 0 && <span className="tn-dot"/>}
+            </button>
+            <button className="tn-btn" onClick={() => go('dashboard')} aria-label="Dashboard">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+              <span className="tn-btn-label">Dashboard</span>
+            </button>
+            <button className="tn-btn tn-post" onClick={() => {
+              setPostForm({ ...defaultPostForm })
+              setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' })
+              setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError('')
+              setVibeInput(''); setVibeFocused(false)
+              setPostView('form')
+              go('post')
+            }}>
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span className="tn-btn-label">Post vlog</span>
+            </button>
+            <button className="tn-avatar" onClick={() => go('profile')} title="Profile">{profile?.initials || 'M'}</button>
+          </div>
         </div>
       </div>
 
-      <aside className="side-rail" aria-label="Primary navigation">
-        <button className={`side-btn${page === 'browse' ? ' on' : ''}`} data-tooltip="Explore" onClick={() => go('browse')} aria-label="Explore">
-          <svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-12A7 7 0 0 0 5 9c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
-        </button>
-        <button className={`side-btn${filtersOpen && page === 'browse' ? ' on' : ''}`} data-tooltip="Filters" onClick={() => page === 'browse' ? setFiltersOpen(o => !o) : go('browse')} aria-label="Filters">
-          <svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-        </button>
-        <button className={`side-btn${page === 'notif' ? ' on' : ''}`} data-tooltip="Notifications" onClick={() => go('notif')} aria-label="Notifications">
-          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          {nCnt > 0 && <span className="ndot"/>}
-        </button>
-        <button className={`side-btn${page === 'dashboard' ? ' on' : ''}`} data-tooltip="Dashboard" onClick={() => go('dashboard')} aria-label="Dashboard">
-          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-        </button>
-        <button className="side-btn post" data-tooltip="Post a vlog" onClick={() => {
-          setPostForm({ ...defaultPostForm })
-          setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' })
-          setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError('')
-          setVibeInput(''); setVibeFocused(false)
-          setPostView('form')
-          go('post')
-        }} aria-label="Post a vlog">
-          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-        <button className={`side-avatar${page === 'profile' ? ' on' : ''}`} data-tooltip="Profile" onClick={() => go('profile')} aria-label="Profile">{profile?.initials || 'M'}</button>
-      </aside>
+      {/* Old navigation hidden - using new topnav instead */}
 
-      {/* ── TABS ──────────────────────────────── */}
-      <div className="tabs">
-        <div className="tabs-inner">
-          <div className={`tb${page === 'browse' ? ' on' : ''}`} onClick={() => go('browse')}>Explore</div>
-          {page === 'detail' && <div className="tb on">Vlog detail<span className="tx" onClick={closeT}>×</span></div>}
-          {page === 'profile' && <div className="tb on">Profile<span className="tx" onClick={closeT}>×</span></div>}
-          {page === 'edit' && <div className="tb on">Edit profile<span className="tx" onClick={closeT}>×</span></div>}
-          {page === 'post' && <div className="tb on">Post a vlog<span className="tx" onClick={closeT}>×</span></div>}
-          {page === 'dashboard' && <div className="tb on">Dashboard<span className="tx" onClick={closeT}>×</span></div>}
-          {page === 'notif' && <div className="tb on">Notifications<span className="tx" onClick={closeT}>×</span></div>}
+      {/* ── FILTER BAR ───────────────────────────────── */}
+      {page === 'browse' && (
+        <div className="filterbar">
+          <div className="filterbar-inner">
+            <div className="fb-tabs">
+              <button className={`fb-tab${vibe === 'All vlogs' ? '' : ' on'}`} onClick={() => setVibe('All vlogs')}>
+                Vibe {vibe !== 'All vlogs' && <span className="fb-tab-count">{vibe}</span>}
+              </button>
+              <button className={`fb-tab${region === 'All regions' ? '' : ' on'}`} onClick={() => setRegion('All regions')}>
+                Region {region !== 'All regions' && <span className="fb-tab-count">{region}</span>}
+              </button>
+              <button className={`fb-tab${budget === 'Any budget' ? '' : ' on'}`} onClick={() => setBudget('Any budget')}>
+                Budget {budget !== 'Any budget' && <span className="fb-tab-count">{budget}</span>}
+              </button>
+            </div>
+            <div className="fb-tools">
+              <button className="fb-saves">
+                <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                Saves
+              </button>
+            </div>
+          </div>
+
+          {/* Filter chips for selected category */}
+          {(vibe !== 'All vlogs' || region !== 'All regions' || budget !== 'Any budget') && (
+            <div className="filterbar-inner">
+              <div className="fb-chips">
+                {vibe !== 'All vlogs' && (
+                  <>
+                    {VIBES.map(v => (
+                      <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>
+                        {v}
+                      </span>
+                    ))}
+                  </>
+                )}
+                {region !== 'All regions' && (
+                  <>
+                    {REGIONS.map(r => (
+                      <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(r)}>
+                        {r}
+                      </span>
+                    ))}
+                  </>
+                )}
+                {budget !== 'Any budget' && (
+                  <>
+                    {BUDGETS.map(b => (
+                      <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(b)}>
+                        {b}
+                      </span>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* ══════════════════════════════════════
-          BROWSE
+          BROWSE - GOOGLE IMAGES STYLE
       ══════════════════════════════════════ */}
       {page === 'browse' && (
-        <div className="page on">
-          <div className="w">
-            {/* Search */}
-            <div className="si">
-              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <input type="text" placeholder="Search destinations, vloggers..." value={search}
-                onChange={e => setSearch(e.target.value)}/>
-            </div>
-
-            {/* Collapsible filters */}
-            <div className="flt-section">
-              <div className="flt-hdr" onClick={() => setFiltersOpen(o => !o)}>
-                <span className="flt-title">Filters</span>
-                {activeFilters.length > 0 && (
-                  <span className="flt-active">{activeFilters.join(' · ')}</span>
-                )}
-                <button className="flt-tog">
-                  <svg viewBox="0 0 24 24" style={{ transform: filtersOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                  {filtersOpen ? 'Collapse' : 'Expand'}
-                </button>
-              </div>
-              {filtersOpen && (
-                <div className="flt-body">
-                  <div className="flt-row">
-                    <div className="clbl">Vibe</div>
-                    <div className="cg">
-                      {VIBES.map(v => (
-                        <span key={v} className={`ch${vibe === v ? ' on' : ''}`} onClick={() => setVibe(v)}>{v}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flt-row">
-                    <div className="clbl">Region</div>
-                    <div className="cg">
-                      {REGIONS.map(r => (
-                        <span key={r} className={`ch${region === r ? ' on' : ''}`} onClick={() => setRegion(r)}>{r}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flt-row">
-                    <div className="clbl">Budget</div>
-                    <div className="cg">
-                      {BUDGETS.map(b => (
-                        <span key={b} className={`ch${budget === b ? ' on' : ''}`} onClick={() => setBudget(b)}>{b}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Vlog list */}
-            <div className="slbl">Trending this week</div>
+        <div className="tn-page">
+          <div className={`gi-layout${vlog && activeFeedId ? ' with-panel' : ''}`}>
+            {/* Vlog Grid */}
             {vlogs.length === 0 ? (
               <div className="vl-empty">No vlogs found — try adjusting your filters.</div>
             ) : (
-              <div className="vl feed-videos">
+              <div className="gi-grid">
                 {vlogs.map(v => {
                   const isActive = activeFeedId === v.id
                   const feedEmbed = isActive ? getFeedEmbedUrl(v) : null
                   return (
-                  <div
-                    key={v.id}
-                    className="vr feed-card"
-                    data-vlog-id={v.id}
-                    ref={node => { feedRefs.current[v.id] = node }}
-                    onClick={() => openD('browse', v.id)}
-                  >
-                    <div className={`vth feed-video ${v.thumbnailColor}`}>
-                      {feedEmbed ? (
-                        <iframe src={feedEmbed} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={v.title}/>
-                      ) : (
-                        <div className="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
-                      )}
-                    </div>
-                    <div className="vi">
-                      <div className="vt">{v.title}</div>
-                      <div className="vm">
-                        <span>📍 {v.location}</span>
-                        {v.cost ? <span>$ {fmtCost(v.cost, v.currency)}</span> : null}
-                        <span>★ {v.rating}</span>
+                    <div
+                      key={v.id}
+                      className={`gi-card${isActive ? ' on' : ''}`}
+                      data-vlog-id={v.id}
+                      ref={node => { feedRefs.current[v.id] = node }}
+                      onClick={() => openD('browse', v.id)}
+                    >
+                      <div className={`gi-thumb ${v.thumbnailColor}`}>
+                        {feedEmbed ? (
+                          <iframe src={feedEmbed} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={v.title}/>
+                        ) : (
+                          <>
+                            <div className="gi-thumb-play">
+                              <div className="gi-thumb-play-btn">
+                                <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        {v.credits > 0 && <div className="gi-cred-badge">✦ {v.credits}</div>}
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                        <div className={`av ${v.author.avatarColor}`}>{v.author.initials}</div>
-                        <span style={{ fontSize:'12px', color:'var(--color-text-secondary)' }}>{v.author.handle}</span>
-                        <span className={`bx ${v.credits > 0 ? 'bc' : 'bf'}`} style={{ marginLeft:'4px' }}>
-                          {v.credits > 0 ? `✦ ${v.credits} credits` : '✓ Free'}
-                        </span>
+                      <div className="gi-title">{v.title}</div>
+                      <div className="gi-info">
+                        <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
+                        <div className="gi-info-handle">{v.author.handle}</div>
                       </div>
                     </div>
-                  </div>
                   )
                 })}
+              </div>
+            )}
+
+            {/* Detail Panel (right side on desktop, bottom sheet on mobile) */}
+            {vlog && activeFeedId && (
+              <div className="gi-panel">
+                <div className="gi-panel-header">
+                  <div className="gi-panel-source">
+                    <div className={`gi-panel-source-icon av ${vlog.author.avatarColor}`}>{vlog.author.initials}</div>
+                    <div className="gi-panel-handle">{vlog.author.handle}</div>
+                  </div>
+                  <div className="gi-panel-nav">
+                    <button className="gi-panel-navbtn" title="Previous">
+                      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <button className="gi-panel-navbtn" title="Next">
+                      <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </div>
+                  <button className="gi-panel-close" onClick={() => setActiveFeedId(null)}>×</button>
+                </div>
+                <div className="gi-panel-body">
+                  {/* Media */}
+                  <div className="gi-panel-media">
+                    {embedUrl ? (
+                      <iframe src={embedUrl} width="100%" height="100%" allowFullScreen title={vlog.title}/>
+                    ) : (
+                      <>
+                        <div style={{ position:'absolute', fontSize:'11px', background:'rgba(0,0,0,.6)', color:'#fff', padding:'4px 8px', borderRadius:'4px' }}>Preview</div>
+                        <svg viewBox="0 0 24 24" width="40" height="40" style={{ stroke:'rgba(255,255,255,.6)', fill:'none', strokeWidth:1.5 }}>
+                          <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                      </>
+                    )}
+                    <button className="gi-panel-zoom" title="Expand">
+                      <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                    </button>
+                  </div>
+
+                  {/* Title & Meta */}
+                  <div className="gi-panel-title">{vlog.title}</div>
+                  <div className="gi-panel-meta">
+                    <span>📍 {vlog.location}</span>
+                    {vlog.cost && <span>💰 {fmtCost(vlog.cost, vlog.currency)}</span>}
+                    <span>⭐ {vlog.rating}</span>
+                    {vlog.duration && <span>📅 {vlog.duration} days</span>}
+                  </div>
+
+                  {/* Description */}
+                  {vlog.description && <div className="gi-panel-copy">{vlog.description}</div>}
+
+                  {/* Actions */}
+                  <div className="gi-panel-actions">
+                    <button className="gi-panel-btn gi-panel-btn-primary" onClick={tLike}>
+                      <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                      {likeCount}
+                    </button>
+                    <button className="gi-panel-btn gi-panel-btn-secondary">
+                      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      {vlog.reviews.length}
+                    </button>
+                  </div>
+
+                  {/* Unlock Box */}
+                  {vlog.credits > 0 && !unlocked && (
+                    <div style={{ padding:'12px', background:'var(--yl)', borderRadius:'10px', marginBottom:'14px' }}>
+                      <div style={{ fontSize:'13px', fontWeight:600, color:'var(--y1)', marginBottom:'6px' }}>Unlock itinerary</div>
+                      <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · ₱{vlog.credits * 10}</div>
+                      <button className="gi-panel-btn gi-panel-btn-primary" onClick={doUnlock} style={{ background:'var(--y)', color:'var(--y1)', fontSize:'12px', padding:'8px' }}>
+                        Unlock
+                      </button>
+                    </div>
+                  )}
+
+                  {/* More from creator */}
+                  {myVlogs.length > 1 && (
+                    <div className="gi-panel-more">
+                      <div className="gi-panel-more-lbl">More from {vlog.author.handle}</div>
+                      <div className="gi-panel-more-grid">
+                        {myVlogs.slice(0, 3).map(v => (
+                          <div key={v.id} className="gi-panel-more-card" onClick={() => openD('browse', v.id)}>
+                            <div className={`gi-thumb ${v.thumbnailColor}`}/>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
