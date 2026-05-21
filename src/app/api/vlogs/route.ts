@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
                   day: number; activity: string; cost: string; locked: boolean
                   highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
                   mediaUrl?: string; mediaType?: string
+                  media?: Array<{ url: string; type: 'image' | 'video' }>
                 }) => ({
                   day: d.day,
                   activity: d.activity || d.highlights?.slice(0, 120) || `Day ${d.day}`,
@@ -97,8 +98,9 @@ export async function POST(req: NextRequest) {
                   foodTips: d.foodTips || null,
                   gettingThere: d.gettingThere || null,
                   tips: d.tips || null,
-                  mediaUrl: d.mediaUrl || null,
-                  mediaType: d.mediaType || null,
+                  // Use first media item if available, otherwise use legacy mediaUrl
+                  mediaUrl: d.media?.[0]?.url || d.mediaUrl || null,
+                  mediaType: d.media?.[0]?.type || d.mediaType || null,
                 })),
               }
             : undefined,
