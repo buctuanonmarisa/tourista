@@ -52,7 +52,7 @@ interface SavedDraft {
   id: string; savedAt: number; title: string
   data: { videoUrl: string; altLinks: { fb: string; tt: string; ig: string }; postForm: typeof defaultPostForm; itinDays: ItineraryFormDay[]; postStep: number }
 }
-const defaultPostForm = { title: '', description: '', country: 'Philippines', city: '', vibe: '', credits: 2, coverImage: '' }
+const defaultPostForm = { title: '', description: '', country: 'Philippines', cities: '', vibe: '', credits: 2, coverImage: '' }
 const defaultItinDays: ItineraryFormDay[] = [
   { day: 1, activity: '', cost: '', locked: false, expanded: false },
   { day: 2, activity: '', cost: '', locked: false, expanded: false },
@@ -680,7 +680,7 @@ export default function Home() {
                         }
                       }}
                     >
-                      <div className={`gi-thumb ${v.thumbnailColor}`}>
+                      <div className={`gi-thumb ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
                         {feedEmbed ? (
                           <iframe src={feedEmbed} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={v.title}/>
                         ) : (
@@ -817,7 +817,7 @@ export default function Home() {
                       <div className="gi-panel-more-grid">
                         {myVlogs.slice(0, 3).map(v => (
                           <div key={v.id} className="gi-panel-more-card" onClick={() => openD('browse', v.id)}>
-                            <div className={`gi-thumb ${v.thumbnailColor}`}/>
+                            <div className={`gi-thumb ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}/>
                           </div>
                         ))}
                       </div>
@@ -1343,22 +1343,22 @@ export default function Home() {
                     </select>
                   </div>
                   <div className="fg">
-                    <label>City / location</label>
+                    <label>Cities / locations</label>
                     <div className="vti">
-                      {postForm.city && (
-                        <span className="vtag">
-                          {postForm.city}
+                      {postForm.cities.split(',').filter(Boolean).map(city => (
+                        <span key={city} className="vtag">
+                          {city}
                           <button type="button" className="vtag-x" onClick={() => {
-                            setPostForm(f => ({ ...f, city: '' }))
-                            setCityInput('')
+                            const cities = postForm.cities.split(',').filter(Boolean).filter(c => c !== city)
+                            setPostForm(f => ({ ...f, cities: cities.join(',') }))
                           }}>×</button>
                         </span>
-                      )}
+                      ))}
                       <div className="vti-wrap">
                         <input
                           type="text"
                           className="vti-in"
-                          placeholder={postForm.city ? '' : 'Search cities...'}
+                          placeholder={postForm.cities ? '' : 'Search cities...'}
                           value={cityInput}
                           onChange={e => setCityInput(e.target.value)}
                           onFocus={() => setCityFocused(true)}
@@ -1366,19 +1366,25 @@ export default function Home() {
                           onKeyDown={e => {
                             if (e.key === 'Enter' && cityInput.trim()) {
                               e.preventDefault()
-                              setPostForm(f => ({ ...f, city: cityInput.trim() }))
+                              const existing = postForm.cities.split(',').filter(Boolean)
+                              const match = (CITIES_BY_COUNTRY[postForm.country] || []).find(c => c.toLowerCase() === cityInput.trim().toLowerCase())
+                              const val = match || cityInput.trim()
+                              if (!existing.includes(val)) {
+                                setPostForm(f => ({ ...f, cities: [...existing, val].join(',') }))
+                              }
                               setCityInput('')
                             }
                           }}
                         />
-                        {(cityFocused && !postForm.city) && (() => {
+                        {(cityFocused) && (() => {
+                          const existing = postForm.cities.split(',').filter(Boolean)
                           const availableCities = CITIES_BY_COUNTRY[postForm.country] || []
-                          const opts = availableCities.filter(c => !cityInput || c.toLowerCase().includes(cityInput.toLowerCase()))
+                          const opts = availableCities.filter(c => !existing.includes(c) && (!cityInput || c.toLowerCase().includes(cityInput.toLowerCase())))
                           return opts.length > 0 || cityInput.trim() ? (
                             <div className="vdrop">
                               {opts.map(c => (
                                 <div key={c} className="vopt" onMouseDown={() => {
-                                  setPostForm(f => ({ ...f, city: c }))
+                                  setPostForm(f => ({ ...f, cities: [...existing, c].join(',') }))
                                   setCityInput('')
                                 }}>
                                   {c}
@@ -1386,7 +1392,7 @@ export default function Home() {
                               ))}
                               {cityInput.trim() && !opts.find(c => c.toLowerCase() === cityInput.toLowerCase()) && (
                                 <div className="vopt" onMouseDown={() => {
-                                  setPostForm(f => ({ ...f, city: cityInput.trim() }))
+                                  setPostForm(f => ({ ...f, cities: [...existing, cityInput.trim()].join(',') }))
                                   setCityInput('')
                                 }} style={{ fontWeight: 600, color: 'var(--g)' }}>
                                   + Add &quot;{cityInput.trim()}&quot; as custom location
@@ -1908,8 +1914,8 @@ export default function Home() {
                           <textarea className="fi" placeholder="What's this vlog about?" value={postForm.description} onChange={(e) => setPostForm({...postForm, description: e.target.value})} style={{ minHeight:'80px' }}/>
                         </div>
                         <div className="fg">
-                          <label>Location</label>
-                          <input type="text" className="fi" placeholder="City, Country" value={postForm.city} onChange={(e) => setPostForm({...postForm, city: e.target.value})} />
+                          <label>Locations</label>
+                          <input type="text" className="fi" placeholder="Cities, Countries" value={postForm.cities} onChange={(e) => setPostForm({...postForm, cities: e.target.value})} />
                         </div>
                         <div className="fg">
                           <label>Vibe</label>
@@ -1971,7 +1977,7 @@ export default function Home() {
                                 body: JSON.stringify({
                                   title: postForm.title,
                                   description: postForm.description,
-                                  location: postForm.city,
+                                  location: postForm.cities,
                                   country: postForm.country,
                                   region: 'Philippines',
                                   vibe: postForm.vibe,
@@ -2180,8 +2186,8 @@ export default function Home() {
                       <textarea className="fi" value={postForm.description} onChange={(e) => setPostForm({...postForm, description: e.target.value})} style={{ minHeight:'80px' }}/>
                     </div>
                     <div className="fg">
-                      <label>Location</label>
-                      <input type="text" className="fi" value={postForm.city} onChange={(e) => setPostForm({...postForm, city: e.target.value})} />
+                      <label>Locations</label>
+                      <input type="text" className="fi" value={postForm.cities} onChange={(e) => setPostForm({...postForm, cities: e.target.value})} />
                     </div>
                     <div className="fg">
                       <label>Premium Credits</label>
@@ -2198,7 +2204,7 @@ export default function Home() {
                             body: JSON.stringify({
                               title: postForm.title,
                               description: postForm.description,
-                              location: postForm.city,
+                              location: postForm.cities,
                               credits: postForm.credits,
                             }),
                           })
