@@ -12,8 +12,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ENV DATABASE_URL="file:/app/prisma/dev.db"
-
+# DATABASE_URL should be passed at runtime or build time
 RUN npx prisma generate
 RUN npx prisma db push
 RUN npx tsx prisma/seed.ts
@@ -26,7 +25,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV DATABASE_URL="file:/app/prisma/dev.db"
+# DATABASE_URL should be passed at runtime via environment variables
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static

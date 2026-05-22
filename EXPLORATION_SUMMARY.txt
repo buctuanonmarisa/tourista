@@ -1,0 +1,216 @@
+================================================================================
+        TOURISTA CODEBASE EXPLORATION - FINAL SUMMARY (May 22, 2026)
+================================================================================
+
+PROJECT ANALYZED: Tourista - Travel Vlog Portal
+MAIN FILES: src/app/page.tsx (2,266 lines), src/app/globals.css (500+ lines)
+
+================================================================================
+FINDINGS OVERVIEW
+================================================================================
+
+1. COUNTRY LIST - NEEDS EXPANSION ❌
+   Status: Currently only 6 countries
+   Locations:
+     - Line 55: Default country in post form
+     - Lines 65-72: CITIES_BY_COUNTRY object
+     - Line 1154: Edit profile dropdown
+     - Line 1341: Post form dropdown
+   
+   What you need:
+     - Expand CITIES_BY_COUNTRY to include all 195+ countries
+     - Update both select dropdowns
+     - Consider autocomplete input instead of long dropdown
+
+2. DAY EXPANSION - WORKING ✅
+   Status: Expandable/collapsible days fully implemented
+   Locations:
+     - Lines 1472-1645: Day card rendering
+     - Line 1484-1486: Toggle button
+     - globals.css Lines 319-337: CSS styling
+   
+   How it works:
+     - Uses expanded: boolean in ItineraryFormDay state
+     - Click "＋ Details" button toggles expansion
+     - Shows/hides: Cost, Media, Highlights, Food tips, etc.
+
+3. MEDIA UPLOAD - FULLY FEATURED ✅
+   Status: Complete implementation with carousel
+   Locations:
+     - Lines 318-349: handleDayMedia() function
+     - Lines 1502-1584: Carousel UI
+     - Lines 1587-1605: Upload zone
+   
+   Features:
+     - Multiple media per day (stored in array)
+     - Both images and videos supported
+     - Carousel with prev/next buttons
+     - Dot indicators and position counter
+     - Optimistic UI updates
+     - Server sync with error handling
+     - Delete individual items
+
+4. EMOJI SUPPORT - NOT IMPLEMENTED ❌
+   Status: No emoji picker library found
+   Current: Only hardcoded emoji labels (✨🍜🚌💡)
+   Locations:
+     - Line 1610: ✨ Highlights
+     - Line 1619: 🍜 Food tips
+     - Line 1628: 🚌 Getting around
+     - Line 1637: 💡 Tips & budget breakdown
+   
+   How it works now:
+     - Standard HTML textarea fields
+     - Users can type/paste emojis manually
+     - Users can use system emoji picker
+   
+   Recommendation:
+     - npm install emoji-picker-react
+     - Add picker component next to textarea
+
+5. CREDITS & PUBLISH - COMPLETE ✅
+   Status: Full implementation with formula and display
+   Locations:
+     - Lines 497-508: calculateCreditsFromCost() function
+     - Lines 1654-1692: Step 3 UI display
+   
+   Formula: Credits = CEIL(Total Day Cost / 75)
+   
+   What's displayed:
+     - Credits per tourist
+     - Total cost breakdown
+     - Price per tourist (₱)
+     - Creator revenue (80%)
+     - Monthly income projection
+   
+   Example:
+     - Day 1: ₱2,500 + Day 2: ₱1,500 = ₱4,000 total
+     - Credits needed: CEIL(4000/75) = 54 credits
+     - Price per tourist: 54 × ₱10 = ₱540
+     - Creator gets: ₱540 × 80% = ₱432
+     - Monthly estimate: ₱432 × 50 = ₱21,600
+
+================================================================================
+STATUS TABLE
+================================================================================
+
+Feature             | Status      | Location      | Priority
+────────────────────┼─────────────┼───────────────┼──────────
+Country List        | ❌ Limited   | Line 55-72    | HIGH
+Day Expansion       | ✅ Complete | Line 1472     | DONE
+Media Upload        | ✅ Complete | Line 318      | DONE
+Media Carousel      | ✅ Complete | Line 1502     | DONE
+Emoji Support       | ❌ Missing   | N/A           | HIGH
+Credits & Publish   | ✅ Complete | Line 497      | DONE
+
+================================================================================
+DOCUMENTATION GENERATED
+================================================================================
+
+Created Files:
+  1. CODEBASE_EXPLORATION.md (224 lines)
+     - Complete overview of all 5 areas
+     - Code snippets with line numbers
+     - Quick reference guide
+  
+  2. DETAILED_FINDINGS.md (86 lines)
+     - Quick reference table
+     - Key code locations
+     - Recommendations
+
+These documents are ready in: /c/Users/Marisa Buctuanon/Desktop/Business/tourista/
+
+================================================================================
+KEY CODE SNIPPETS
+================================================================================
+
+Default Country:
+  Line 55: const defaultPostForm = { country: 'Philippines', ... }
+
+Cities Mapping:
+  Lines 65-72: const CITIES_BY_COUNTRY: Record<string, string[]> = { ... }
+
+Day Expansion Toggle:
+  Line 1484: <button onClick={() => updDay(i, 'expanded', !d.expanded)}>
+
+Media Upload Handler:
+  Line 318: const handleDayMedia = async (i: number, file: File) => { ... }
+
+Calculate Credits:
+  Line 497: const calculateCreditsFromCost = () => { ... }
+
+Display Credits:
+  Line 1656: const calculatedCredits = calculateCreditsFromCost()
+
+================================================================================
+RECOMMENDED ACTIONS
+================================================================================
+
+HIGH PRIORITY (Do First):
+  1. Expand country list to 195+ countries
+  2. Add emoji picker library (emoji-picker-react)
+  3. Refactor 2,266-line component into smaller files
+
+MEDIUM PRIORITY:
+  4. Add image crop/rotate functionality
+  5. Add media captions feature
+  6. Implement lazy loading for images
+
+LOW PRIORITY:
+  7. Add featured media option
+  8. Performance optimizations
+  9. Code splitting and component isolation
+
+================================================================================
+ARCHITECTURE NOTES
+================================================================================
+
+Single File Component:
+  - Entire app logic in src/app/page.tsx (2,266 lines)
+  - Makes maintenance difficult
+  - Recommend: Extract into reusable components
+
+State Management:
+  - Uses React hooks (useState, useCallback, useRef)
+  - No state management library
+  - Works fine for current scope
+
+Database:
+  - Uses Prisma ORM
+  - Connected to database via API routes
+
+Media Storage:
+  - File uploads handled via /api/upload route
+  - Returns URL for storage
+
+================================================================================
+QUESTIONS ANSWERED
+================================================================================
+
+✅ Where is the country list defined?
+   Lines 55 (default) and 65-72 (CITIES_BY_COUNTRY object)
+
+✅ Are days expandable?
+   Yes, using expanded: boolean state, fully working
+
+✅ How does media upload work?
+   handleDayMedia function (318-349) with optimistic UI updates
+
+✅ How are media items stored?
+   As array: media?: MediaItem[] in ItineraryFormDay
+
+✅ Does it support multiple uploads per day?
+   Yes, unlimited media items per day
+
+✅ Is there an emoji picker?
+   No, only hardcoded labels. Recommendation: add emoji-picker-react
+
+✅ How are credits calculated?
+   Formula: CEIL(Total Cost / 75) where 75 is per-credit value in pesos
+
+✅ What's shown in Step 3?
+   Credits needed, breakdown, price per tourist, creator revenue, monthly estimate
+
+================================================================================
+END OF REPORT
+================================================================================

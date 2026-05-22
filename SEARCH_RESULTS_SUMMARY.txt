@@ -1,0 +1,137 @@
+PUBLISH FLOW CODEBASE SEARCH - RESULTS SUMMARY
+==============================================
+
+SEARCH COMPLETED: May 22, 2026
+
+FILES SEARCHED:
+1. src/app/page.tsx (Main frontend component)
+2. src/app/api/vlogs/route.ts (API endpoint for vlog creation)
+
+FUNCTIONS FOUND AND ANALYZED:
+
+1. publishVlog() 
+   Location: src/app/page.tsx, lines 447-480
+   Status: FOUND & ANALYZED
+   Validates: Video platform detection, itinerary filtering, credits calculation
+   Missing: User profile check, credits check, video validity
+
+2. nextStep() 
+   Location: src/app/page.tsx, lines 357-371
+   Status: FOUND & ANALYZED
+   Validates: Step 1 (video URL, title), Step 2 (itinerary), Step 3 (NOTHING)
+   Missing: Step 3 validation (critical gap)
+
+3. calculateCreditsFromCost()
+   Location: src/app/page.tsx, lines 593-604
+   Status: FOUND & ANALYZED
+   Formula: ₱75 = 1 credit
+   Validation: Sum all day costs, strip symbols, divide by 75, round up
+   Status: Working correctly
+
+4. Publish Button & Error Display
+   Location: src/app/page.tsx, lines 1884-1900
+   Status: FOUND & ANALYZED
+   Shows: Error box (if error), Back button, Save draft button (steps 1-2), Publish/Continue button
+   Behavior: Button disabled only while publishing, not by form validity
+
+5. Ready to Publish Section
+   Location: src/app/page.tsx, lines 1844-1882
+   Status: FOUND & ANALYZED
+   Displays: Credits calculation, breakdown, revenue projection, confirmation message
+   Shows users: Clear cost-to-credits conversion, estimated passive income
+
+6. POST /api/vlogs Endpoint
+   Location: src/app/api/vlogs/route.ts, lines 46-116
+   Status: FOUND & ANALYZED
+   Behavior: Accepts POST, finds/creates default user, creates vlog with status 'live'
+   Validation: NONE - critical security gap
+
+STATE MANAGEMENT:
+- [publishing, setPublishing] - Line 176
+- [publishError, setPublishError] - Line 177
+
+VALIDATION FLOW DISCOVERED:
+
+Current State:
+Step 1: ✓ Validates video URL and title non-empty
+Step 2: ✓ Validates at least one itinerary day filled
+Step 3: ✗ NO VALIDATION - goes straight to publishVlog()
+API:   ✗ NO VALIDATION - accepts any data, creates default user if needed
+
+CRITICAL FINDINGS:
+
+1. Authentication Gap
+   - No check that user is logged in
+   - No user ID validation
+   - Server creates default "traveler" user if none exists
+   - SECURITY RISK: Anyone can publish vlogs
+
+2. Validation Gap at Step 3
+   - User can click "Publish →" without validation
+   - No check for user profile
+   - No check for user credits
+   - No check for realistic costs
+   - No duplicate prevention
+   - No rate limiting
+
+3. Server-Side Gaps
+   - API accepts any POST request
+   - No field validation
+   - No authentication required
+   - No business logic checks
+   - Generic error handling
+
+4. Cost Calculation
+   - Works correctly: ₱75 = 1 credit
+   - BUT: Can be gamed (no max/min bounds)
+   - No validation that costs are realistic
+
+RECOMMENDATIONS SUMMARY:
+
+Immediate (Critical):
+- Add authentication check before Step 3
+- Add server-side validation of all fields
+- Replace default user with authenticated user
+
+High Priority:
+- Add rate limiting (prevent spam publishes)
+- Add duplicate prevention
+- Add video URL validation
+- Improve error messages
+
+Medium Priority:
+- Add cost bounds checking
+- Add description requirement
+- Add error logging
+
+DOCUMENTS GENERATED:
+
+1. PUBLISH_FLOW_ANALYSIS.md (7.3 KB)
+   - Comprehensive technical analysis
+   - Full function code
+   - Validation breakdown
+   - Security gaps
+   - Detailed recommendations
+
+2. PUBLISH_FLOW_CODE_REFERENCE.md (3.7 KB)
+   - Quick reference guide
+   - Line numbers
+   - Data structures
+   - Validation checklist
+   - Flow diagrams
+
+3. PUBLISH_FLOW_EXECUTIVE_SUMMARY.md (4.2 KB)
+   - High-level overview
+   - Key discoveries
+   - Issue summary table
+   - Next steps
+
+4. SEARCH_RESULTS_SUMMARY.txt (This file)
+   - Search results overview
+   - What was found
+   - Critical issues
+   - Recommendations
+
+TOTAL ANALYSIS: 4 comprehensive documents covering all aspects of the publish flow
+
+END OF SEARCH RESULTS

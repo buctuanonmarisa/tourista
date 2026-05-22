@@ -1,0 +1,272 @@
+TOURISTA LAYOUT STRUCTURE - VISUAL SUMMARY
+
+Core Files:
+- src/app/page.tsx (1,500+ lines) - All components & logic
+- src/app/globals.css (546 lines) - All styling
+- src/app/layout.tsx - Minimal wrapper
+
+==============================================================================
+1. NAVIGATION BAR (.nav) - Lines 478-509, CSS 21-40
+==============================================================================
+
+[Logo] ......... [Spacer] [Bell] [Dashboard] [+ Post] [Avatar]
+
+Classes:
+  .nav ..................... Sticky container (height: 56px)
+  .nav-inner ............... Centered wrapper (max-width: 560px)
+  .ni ...................... Icon buttons (36×36px)
+  .pbtn .................... Primary button (green)
+  .avb ..................... Avatar circle (33×33px)
+  .ndot .................... Notification badge (red dot)
+
+Responsive: Mobile (all visible) → Desktop (900px+, repositioned)
+
+
+==============================================================================
+2. SIDE RAIL (.side-rail) - Lines 511-536, CSS 34, 134-141
+==============================================================================
+
+Position: Fixed left (58px width, hidden on mobile)
+
+Home icon
+Filters icon
+Notifications icon
+Dashboard icon
+Post icon
+
+[Avatar] at bottom
+
+Classes:
+  .side-rail .............. Fixed sidebar (58px)
+  .side-btn ............... Nav button (42×42px)
+  .side-btn.on ............ Active (light green bg)
+  .side-avatar ............ Avatar at bottom (38×38px)
+
+Responsive: Hidden mobile → Fixed desktop (900px+)
+
+
+==============================================================================
+3. TABS SECTION (.tabs) - Lines 538-549, CSS 42-49
+==============================================================================
+
+[Explore] [Vlog detail ×] [Profile ×]
+
+Classes:
+  .tabs ................... Sticky container
+  .tabs-inner ............ Max-width 560px, horizontal scroll
+  .tb ..................... Tab item
+  .tb.on .................. Active tab (green)
+  .tx ..................... Close button
+
+Responsive: Visible mobile → Hidden desktop (900px+)
+
+
+==============================================================================
+4. BROWSE PAGE FILTERS - Lines 558-606, CSS 62-80
+==============================================================================
+
+Search input: .si (flex, border, focus shadow)
+
+Collapsible filters:
+┌─────────────────────────────┐
+│ Filters [Active filters] [v]│
+├─────────────────────────────┤
+│ Vibe: [chip] [chip] [chip]  │
+│ Region: [chip] [chip]       │
+│ Budget: [chip] [chip]       │
+└─────────────────────────────┘
+
+Classes:
+  .si ..................... Search input wrapper
+  .flt-section ........... Filter container
+  .flt-hdr ............... Clickable header
+  .flt-tog ............... Collapse button
+  .flt-body .............. Collapsible content
+  .cg ..................... Chip group
+  .ch ..................... Chip button
+  .ch.on .................. Selected chip (green)
+
+Responsive: Normal mobile → Fixed sidebar desktop (286px at 900px+)
+
+
+==============================================================================
+5. VLOG LIST VIEW (.vl, .vr) - Lines 613-650, CSS 82-121
+==============================================================================
+
+Standard list:
+┌─────────────────────────────────┐
+│ [Thumb] Title                   │
+│ 88×58px Location | Cost | Rating│
+│         [Avatar] @handle        │
+├─────────────────────────────────┤
+
+Feed view (4:5 aspect):
+┌──────────────┐
+│ [Video 4:5]  │
+│   ▶ Button   │
+├──────────────┤
+│ Title        │
+│ Details      │
+└──────────────┘
+
+Classes:
+  .vl ..................... List container (gap: 1px)
+  .vr ..................... Card row (flex)
+  .vth .................... Thumbnail (88×58px)
+  .vp ..................... Play button (26×26px)
+  .vi ..................... Info section
+  .vt ..................... Title (ellipsis)
+  .vm ..................... Metadata
+  .bx ..................... Badge
+  .bc ..................... Credit badge (yellow)
+  .bf ..................... Free badge (green)
+  .av ..................... Avatar (20×20px)
+  
+Feed classes:
+  .feed-videos ........... Feed layout (gap: 22px)
+  .feed-card ............. Card (rounded 22px, shadow)
+  .feed-video ............ Video (4:5 aspect)
+
+Thumbnail color classes:
+  .t1, .t2, .t3, .t4, .t5 - Gradient backgrounds
+
+
+==============================================================================
+6. DETAIL PAGE - Lines 659-836, CSS 156-241
+==============================================================================
+
+Back button: .bk (green text)
+
+Video section:
+  .vbox - Container
+  .vpl - Player (16:9 aspect)
+  .vpbig - Play button (74×74px)
+  .won - Watch on links
+  .pp - Platform link
+  .pdot - Platform color dot
+
+Title & author:
+  .dtt - Title (28px)
+  .dvl - Author row
+  .dvln - Author name
+  .fbtn - Follow button
+
+Stats grid:
+  .s4 - Container (4 columns)
+  .sb - Box
+  .sv - Value
+  .sl - Label
+
+Engagement:
+  .eng - Container
+  .eb - Button
+  .eb.lk - Liked (red)
+
+Unlock box:
+  .ulb - Container (yellow gradient)
+  .ulc - Button (orange gradient)
+
+Itinerary:
+  .id - Day item
+  .iday - Circle (44×44px)
+  .inn - Activity title
+  .ico - Cost label
+  .idc - Description
+  .iclr - Clip row
+  .icth - Thumbnail (68×44px)
+
+Reviews:
+  .rlbl - Label
+  .ri - Item
+  .rn - Name
+  .rs - Stars
+  .rin - Input
+  .rsb - Submit
+
+
+==============================================================================
+7. RESPONSIVE BREAKPOINTS
+==============================================================================
+
+MOBILE (< 900px):
+  - Top nav with all buttons visible
+  - Tabs section visible
+  - Side rail hidden
+  - Filters normal layout
+  - Full-width content
+
+TABLET/DESKTOP (900px - 1160px):
+  - Fixed 58px left sidebar
+  - Nav repositioned
+  - Tabs hidden
+  - Filters collapsible with hover expand
+  - translateX(calc(-100% + 12px)) when hovering
+
+WIDE DESKTOP (>= 1160px):
+  - Fixed 58px sidebar + 286px filters + content + 420px detail
+  - Google Images-style layout
+  - Full 3-column split view
+
+
+==============================================================================
+8. COLOR VARIABLES
+==============================================================================
+
+PRIMARY (Green):
+  --g: #2A7A50
+  --g1: #1B5C3A (dark)
+  --gl: #E6F5ED (light bg)
+
+ACCENT (Yellow):
+  --y: #D08A0A
+  --yl: #FEF0CC (light bg)
+
+SECONDARY (Blue):
+  --b: #0876A8
+  --bl: #D8F0FA (light bg)
+
+TEXT:
+  --color-text-primary: #162A1F
+  --color-text-secondary: #567268
+
+BACKGROUND:
+  --color-background-primary: #FFFFFF
+  --color-background-secondary: #F2FAF6
+  --color-background-tertiary: #EBF5F0
+
+BORDERS:
+  --color-border-secondary: rgba(27,92,58,.13)
+
+
+==============================================================================
+9. STATE-DRIVEN CLASSES
+==============================================================================
+
+.page.on ................. Active page (display: block)
+.tb.on ................... Active tab (green)
+.side-btn.on ............ Active nav (green)
+.ch.on ................... Selected chip (green)
+.eb.lk ................... Liked button (red)
+.fbtn.fol ............... Following (green)
+
+
+==============================================================================
+10. INTERACTION PATTERNS
+==============================================================================
+
+COLLAPSIBLE:
+  - Filters toggle with arrow rotation
+  - Itinerary days expand/collapse
+
+INTERSECTION OBSERVER:
+  - Feed auto-play detection
+  - threshold: [0.55, 0.75]
+
+LOCALSTORAGE:
+  - tourista_drafts (JSON)
+  - tourista_pinned (JSON Set)
+
+DATA ATTRIBUTES:
+  - data-vlog-id (tracking)
+  - data-tooltip (tooltip text)
+

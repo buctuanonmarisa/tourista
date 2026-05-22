@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import EmojiPicker from 'emoji-picker-react'
 
 /* ─── Types ──────────────────────────────────────────── */
 interface VlogAuthor {
@@ -64,10 +65,74 @@ const REGIONS = ['All regions','Philippines','Japan','Southeast Asia','Europe','
 const BUDGETS = ['Any budget','Under ₱10k','₱10k – ₱30k','Above ₱30k','Free vlogs only']
 const CITIES_BY_COUNTRY: Record<string, string[]> = {
   'Philippines': ['Manila', 'Cebu', 'Davao', 'Siargao', 'Palawan', 'Boracay', 'Baguio', 'Iloilo', 'Cagayan de Oro', 'Dumaguete', 'Coron', 'El Nido', 'Vigan', 'Bacolod', 'Zamboanga', 'Tacloban', 'Cabanatuan', 'Quezon City', 'Makati', 'Pasig'],
-  'Japan': ['Tokyo', 'Kyoto', 'Osaka', 'Hiroshima', 'Nagoya', 'Yokohama', 'Kobe', 'Sapporo', 'Fukuoka', 'Nara', 'Kanazawa', 'Takayama', 'Kawagoe', 'Nikko', 'Hakone', 'Kamakura', 'Okinawa', 'Hiroshima', 'Nagasaki', 'Matsumoto'],
+  'Japan': ['Tokyo', 'Kyoto', 'Osaka', 'Hiroshima', 'Nagoya', 'Yokohama', 'Kobe', 'Sapporo', 'Fukuoka', 'Nara', 'Kanazawa', 'Takayama', 'Kawagoe', 'Nikko', 'Hakone', 'Kamakura', 'Okinawa', 'Nagasaki', 'Matsumoto', 'Sendai'],
   'Vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hoi An', 'Nha Trang', 'Sapa', 'Halong Bay', 'Can Tho', 'Hue', 'Phu Quoc', 'Ninh Binh', 'Quy Nhon', 'Dalat', 'Mekong Delta', 'Cat Ba Island'],
   'Thailand': ['Bangkok', 'Phuket', 'Chiang Mai', 'Pattaya', 'Krabi', 'Koh Samui', 'Koh Phi Phi', 'Ayutthaya', 'Chiang Rai', 'Hua Hin', 'Koh Tao', 'Koh Lanta', 'Sukhothai', 'Lampang', 'Nakhon Ratchasima'],
   'Indonesia': ['Jakarta', 'Bali', 'Yogyakarta', 'Bandung', 'Surabaya', 'Lombok', 'Flores', 'Sumatra', 'Borneo', 'Sulawesi', 'Ubud', 'Seminyak', 'Sanur', 'Kuta', 'Gili Islands', 'Komodo', 'Borobudur', 'Prambanan', 'Tanah Lot', 'Mount Bromo'],
+  'USA': ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego', 'Dallas', 'San Jose', 'Austin', 'Jacksonville', 'Fort Worth', 'Columbus', 'Charlotte', 'San Francisco', 'Miami', 'Seattle', 'Denver', 'Boston'],
+  'Canada': ['Toronto', 'Vancouver', 'Montreal', 'Calgary', 'Ottawa', 'Edmonton', 'Winnipeg', 'Quebec City', 'Hamilton', 'Kitchener', 'London', 'Victoria', 'Halifax', 'Saskatoon', 'Niagara Falls'],
+  'Mexico': ['Mexico City', 'Guadalajara', 'Monterrey', 'Cancun', 'Playa del Carmen', 'Puerto Vallarta', 'Los Cabos', 'Mazatlan', 'Acapulco', 'Cozumel', 'Merida', 'Oaxaca', 'Guanajuato', 'San Miguel de Allende', 'Tulum'],
+  'United Kingdom': ['London', 'Manchester', 'Birmingham', 'Leeds', 'Glasgow', 'Liverpool', 'Newcastle', 'Sheffield', 'Bristol', 'Edinburgh', 'Cardiff', 'Belfast', 'Oxford', 'Cambridge', 'Bath'],
+  'France': ['Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice', 'Nantes', 'Strasbourg', 'Montpellier', 'Bordeaux', 'Lille', 'Cannes', 'Monaco', 'Versailles', 'Provence', 'Loire Valley'],
+  'Germany': ['Berlin', 'Munich', 'Frankfurt', 'Cologne', 'Hamburg', 'Dresden', 'Düsseldorf', 'Dortmund', 'Essen', 'Leipzig', 'Nuremberg', 'Heidelberg', 'Rothenburg', 'Neuschwanstein', 'Black Forest'],
+  'Spain': ['Madrid', 'Barcelona', 'Valencia', 'Seville', 'Bilbao', 'Malaga', 'Palma', 'Las Palmas', 'Alicante', 'Cordoba', 'Granada', 'Toledo', 'Salamanca', 'San Sebastian', 'Ibiza'],
+  'Italy': ['Rome', 'Milan', 'Venice', 'Florence', 'Naples', 'Turin', 'Palermo', 'Genoa', 'Bologna', 'Verona', 'Pisa', 'Siena', 'Amalfi', 'Cinque Terre', 'Lake Como'],
+  'Australia': ['Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Hobart', 'Canberra', 'Gold Coast', 'Sunshine Coast', 'Newcastle', 'Wollongong', 'Cairns', 'Darwin', 'Fremantle', 'Byron Bay'],
+  'New Zealand': ['Auckland', 'Wellington', 'Christchurch', 'Hamilton', 'Tauranga', 'Dunedin', 'Palmerston North', 'Rotorua', 'Queenstown', 'Wanaka', 'Napier', 'Nelson', 'Gisborne', 'Invercargill', 'Greymouth'],
+  'South Korea': ['Seoul', 'Busan', 'Incheon', 'Daegu', 'Daejeon', 'Gwangju', 'Ulsan', 'Gyeongju', 'Jeju', 'Gangneung', 'Suwon', 'Jeonju', 'Andong', 'Nami Island', 'Myeongdong'],
+  'China': ['Beijing', 'Shanghai', 'Guangzhou', 'Shenzhen', 'Chengdu', 'Hangzhou', 'Wuhan', 'Xi\'an', 'Chongqing', 'Nanjing', 'Suzhou', 'Guilin', 'Zhangjiajie', 'Yangshuo', 'Harbin'],
+  'India': ['Delhi', 'Mumbai', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Jaipur', 'Lucknow', 'Chandigarh', 'Agra', 'Varanasi', 'Goa', 'Kerala', 'Rajasthan'],
+  'Malaysia': ['Kuala Lumpur', 'George Town', 'Ipoh', 'Johor Bahru', 'Kota Kinabalu', 'Kuching', 'Petaling Jaya', 'Shah Alam', 'Selangor', 'Penang', 'Langkawi', 'Malacca', 'Putrajaya', 'Klang', 'Subang Jaya'],
+  'Singapore': ['Singapore', 'Marina Bay', 'Sentosa', 'Orchard', 'Changi', 'Jurong', 'Bukit Timah', 'East Coast', 'Geylang', 'Kallang'],
+  'Brazil': ['São Paulo', 'Rio de Janeiro', 'Brasília', 'Salvador', 'Fortaleza', 'Belo Horizonte', 'Manaus', 'Curitiba', 'Recife', 'Porto Alegre', 'Iguazu Falls', 'Bahia', 'Amazon', 'Copacabana', 'Ipanema'],
+  'Argentina': ['Buenos Aires', 'Córdoba', 'Rosario', 'Mendoza', 'La Plata', 'San Miguel de Tucumán', 'Mar del Plata', 'Salta', 'Bariloche', 'Ushuaia', 'Iguazu Falls', 'Patagonia', 'Tango District', 'La Boca', 'San Telmo'],
+  'Peru': ['Lima', 'Cusco', 'Arequipa', 'Trujillo', 'Iquitos', 'Puno', 'Ayacucho', 'Huancayo', 'Tacna', 'Piura', 'Machu Picchu', 'Sacred Valley', 'Lake Titicaca', 'Amazon', 'Nazca Lines'],
+  'Colombia': ['Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Cartagena', 'Santa Marta', 'Bogotá', 'Cúcuta', 'Bucaramanga', 'Manizales', 'Coffee Triangle', 'Tayrona', 'San Andrés', 'Providencia', 'Leticia'],
+  'Chile': ['Santiago', 'Valparaíso', 'Viña del Mar', 'Concepción', 'La Serena', 'Temuco', 'Valdivia', 'Puerto Montt', 'Punta Arenas', 'Atacama', 'Patagonia', 'Easter Island', 'Atacama Desert', 'Lake District', 'Torres del Paine'],
+  'Egypt': ['Cairo', 'Alexandria', 'Giza', 'Luxor', 'Aswan', 'Hurghada', 'Sharm El-Sheikh', 'Ismailia', 'Port Said', 'Suez', 'Nile Valley', 'Red Sea', 'Sinai', 'Oasis', 'Nile Delta'],
+  'South Africa': ['Johannesburg', 'Cape Town', 'Durban', 'Pretoria', 'Port Elizabeth', 'Bloemfontein', 'Pietermaritzburg', 'East London', 'Polokwane', 'Nelspruit', 'Kruger National Park', 'Garden Route', 'Winelands', 'Drakensberg', 'Kruger'],
+  'Kenya': ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Eldoret', 'Kericho', 'Nyeri', 'Muranga', 'Isiolo', 'Lamu', 'Masai Mara', 'Mount Kenya', 'Amboseli', 'Tsavo', 'Diani Beach'],
+  'Turkey': ['Istanbul', 'Ankara', 'Izmir', 'Bursa', 'Antalya', 'Konya', 'Gaziantep', 'Adana', 'Diyarbakır', 'Mersin', 'Cappadocia', 'Ephesus', 'Troy', 'Pamukkale', 'Bodrum'],
+  'Greece': ['Athens', 'Thessaloniki', 'Patras', 'Heraklion', 'Larissa', 'Volos', 'Rethymno', 'Chania', 'Rhodes', 'Mykonos', 'Santorini', 'Crete', 'Delphi', 'Meteora', 'Peloponnese'],
+  'Portugal': ['Lisbon', 'Porto', 'Braga', 'Covilhã', 'Guarda', 'Castelo Branco', 'Évora', 'Faro', 'Funchal', 'Ponta Delgada', 'Algarve', 'Douro Valley', 'Sintra', 'Cascais', 'Madeira'],
+  'Netherlands': ['Amsterdam', 'Rotterdam', 'The Hague', 'Utrecht', 'Eindhoven', 'Groningen', 'Maastricht', 'Delft', 'Haarlem', 'Leiden', 'Windmills', 'Tulips', 'Canals', 'Volendam', 'Marken'],
+  'Belgium': ['Brussels', 'Antwerp', 'Ghent', 'Bruges', 'Liège', 'Charleroi', 'Namur', 'Mons', 'Tournai', 'Ostend', 'Flanders', 'Wallonia', 'Ardennes', 'Spa', 'Waterloo'],
+  'Switzerland': ['Zurich', 'Geneva', 'Basel', 'Bern', 'Lausanne', 'Lucerne', 'St. Gallen', 'Schaffhausen', 'Neuchâtel', 'Fribourg', 'Alps', 'Interlaken', 'Zermatt', 'Jungfrau', 'Matterhorn'],
+  'Austria': ['Vienna', 'Salzburg', 'Innsbruck', 'Graz', 'Linz', 'Klagenfurt', 'Villach', 'Wels', 'St. Pölten', 'Dornbirn', 'Tyrol', 'Salzkammergut', 'Hallstatt', 'Danube Valley', 'Vorarlberg'],
+  'Czech Republic': ['Prague', 'Brno', 'Ostrava', 'Plzeň', 'Liberec', 'Ústí nad Labem', 'Hradec Králové', 'Pardubice', 'Olomouc', 'Zlín', 'Bohemia', 'Moravia', 'Krkonoše', 'Český Krumlov', 'Kutná Hora'],
+  'Poland': ['Warsaw', 'Kraków', 'Łódź', 'Wrocław', 'Poznań', 'Gdańsk', 'Szczecin', 'Bydgoszcz', 'Lublin', 'Katowice', 'Tatra Mountains', 'Baltic Coast', 'Auschwitz', 'Malbork Castle', 'Białowieża'],
+  'Hungary': ['Budapest', 'Debrecen', 'Szeged', 'Miskolc', 'Pécs', 'Győr', 'Nyíregyháza', 'Kecskemét', 'Szolnok', 'Szekszárd', 'Lake Balaton', 'Danube Bend', 'Thermal Baths', 'Eger', 'Tokaj'],
+  'Romania': ['Bucharest', 'Cluj-Napoca', 'Timișoara', 'Iași', 'Constanța', 'Craiova', 'Brașov', 'Galați', 'Ploiești', 'Oradea', 'Carpathians', 'Transylvania', 'Black Sea', 'Danube Delta', 'Bran Castle'],
+  'Bulgaria': ['Sofia', 'Plovdiv', 'Varna', 'Burgas', 'Ruse', 'Stara Zagora', 'Pleven', 'Sliven', 'Dobrich', 'Shumen', 'Black Sea Coast', 'Pirin Mountains', 'Rila Monastery', 'Bansko', 'Sozopol'],
+  'Croatia': ['Zagreb', 'Split', 'Rijeka', 'Osijek', 'Zadar', 'Pula', 'Dubrovnik', 'Rovinj', 'Hvar', 'Korčula', 'Dalmatian Coast', 'Adriatic Sea', 'Plitvice Lakes', 'Istria', 'Dalmatia'],
+  'Serbia': ['Belgrade', 'Novi Sad', 'Niš', 'Kragujevac', 'Subotica', 'Čačak', 'Jagodina', 'Vranje', 'Smederevo', 'Zemun', 'Danube', 'Danube Gorge', 'Kopaonik', 'Tara', 'Fruška Gora'],
+  'Ukraine': ['Kyiv', 'Kharkiv', 'Odesa', 'Dnipro', 'Donetsk', 'Zaporizhzhia', 'Lviv', 'Mykolaiv', 'Mariupol', 'Luhansk', 'Carpathians', 'Black Sea', 'Dnieper River', 'Crimea', 'Carpathian Mountains'],
+  'Russia': ['Moscow', 'St. Petersburg', 'Novosibirsk', 'Yekaterinburg', 'Nizhny Novgorod', 'Kazan', 'Chelyabinsk', 'Omsk', 'Samara', 'Rostov-on-Don', 'Siberia', 'Ural Mountains', 'Lake Baikal', 'Kamchatka', 'Caucasus'],
+  'Israel': ['Tel Aviv', 'Jerusalem', 'Haifa', 'Beersheba', 'Netanya', 'Ashdod', 'Ashkelon', 'Ramat Gan', 'Petah Tikva', 'Holon', 'Dead Sea', 'Red Sea', 'Galilee', 'Negev', 'West Bank'],
+  'Saudi Arabia': ['Riyadh', 'Jeddah', 'Mecca', 'Medina', 'Dammam', 'Khobar', 'Abha', 'Tabuk', 'Hail', 'Jizan', 'Red Sea', 'Arabian Desert', 'Asir Mountains', 'Empty Quarter', 'Rub\' al Khali'],
+  'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah', 'Al Ain', 'Ras Al Khaimah', 'Mushrif', 'Arabian Gulf', 'Desert', 'Palm Islands', 'Burj Khalifa', 'Sheikh Zayed Grand Mosque'],
+  'Qatar': ['Doha', 'Al Rayyan', 'Al Wakrah', 'Umm Salal', 'Al Khor', 'Al Shamal', 'Dukhan', 'Al Shahaniya', 'Lusail', 'Madinat ash Shamal', 'Persian Gulf', 'Corniche', 'Museum of Islamic Art', 'Souq Waqif', 'The Pearl'],
+  'Oman': ['Muscat', 'Salalah', 'Sohar', 'Nizwa', 'Sur', 'Ibri', 'Rustaq', 'Bahla', 'Haima', 'Duqm', 'Arabian Sea', 'Musandam Peninsula', 'Wadi Darbat', 'Jebel Akhdar', 'Wahiba Sands'],
+  'Lebanon': ['Beirut', 'Tripoli', 'Sidon', 'Tyre', 'Baalbek', 'Byblos', 'Jounieh', 'Zahle', 'Broumana', 'Aley', 'Cedar Mountains', 'Mediterranean', 'Cedars of God', 'Bekaa Valley', 'Mount Lebanon'],
+  'Jordan': ['Amman', 'Zarqa', 'Irbid', 'Aqaba', 'Jerash', 'Madaba', 'Karak', 'Ajloun', 'Petra', 'Dead Sea', 'Wadi Rum', 'Jordan River', 'Red Sea', 'Negev', 'Amman Citadel'],
+  'Pakistan': ['Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Hyderabad', 'Peshawar', 'Quetta', 'Sialkot', 'Himalayas', 'Karakoram', 'Indus Valley', 'Hunza Valley', 'K2'],
+  'Bangladesh': ['Dhaka', 'Chittagong', 'Khulna', 'Rajshahi', 'Sylhet', 'Barisal', 'Rangpur', 'Mymensingh', 'Narayanganj', 'Gazipur', 'Sundarbans', 'Cox\'s Bazar', 'Sylhet Tea Gardens', 'Ganges Delta', 'Bay of Bengal'],
+  'Sri Lanka': ['Colombo', 'Kandy', 'Galle', 'Anuradhapura', 'Polonnaruwa', 'Jaffna', 'Trincomalee', 'Batticaloa', 'Matara', 'Negombo', 'Central Highlands', 'South Coast', 'Tea Plantations', 'Adam\'s Peak', 'Sigiriya'],
+  'Myanmar': ['Yangon', 'Mandalay', 'Naypyidaw', 'Bagan', 'Taunggyi', 'Mawlamyine', 'Sittwe', 'Myitkyina', 'Lashio', 'Kyaikto', 'Irrawaddy River', 'Shan State', 'Inle Lake', 'Bagan Temples', 'Shwedagon Pagoda'],
+  'Cambodia': ['Phnom Penh', 'Siem Reap', 'Battambang', 'Sihanoukville', 'Kampong Thom', 'Kratie', 'Mondulkiri', 'Ratanakiri', 'Kep', 'Kampot', 'Angkor Wat', 'Tonlé Sap', 'Mekong River', 'Cardamom Mountains', 'Koh Rong'],
+  'Laos': ['Vientiane', 'Luang Prabang', 'Savannakhet', 'Pakse', 'Vang Vieng', 'Luang Namtha', 'Oudomxay', 'Thakhek', 'Khone Phapeng', 'Attapeu', 'Mekong River', 'Bolaven Plateau', 'Luang Prabang', 'Vang Vieng', 'Si Phan Don'],
+  'Taiwan': ['Taipei', 'Kaohsiung', 'Taichung', 'Tainan', 'Keelung', 'Hsinchu', 'Chiayi', 'Yunlin', 'Changhua', 'Nantou', 'Alishan', 'Sun Moon Lake', 'Jiufen', 'Taroko Gorge', 'Kenting'],
+  'Hong Kong': ['Hong Kong', 'Kowloon', 'New Territories', 'Victoria Peak', 'Central', 'Causeway Bay', 'Mong Kok', 'Tsim Sha Tsui', 'Stanley', 'Lantau Island', 'Victoria Harbour', 'Star Ferry', 'Peak Tram', 'Disneyland', 'Tian Tan Buddha'],
+  'Macau': ['Macau', 'Taipa', 'Coloane', 'Outer Harbour', 'Inner Harbour', 'Zhuhai', 'Cotai Strip', 'Ruins of St. Paul\'s', 'A-Ma Temple', 'Mandarin\'s House'],
+  'Iceland': ['Reykjavik', 'Akureyri', 'Hafnarfjörður', 'Kópavogur', 'Hveragerði', 'Borgarnes', 'Stykkishólmur', 'Ísafjörður', 'Egilsstaðir', 'Höfn', 'Golden Circle', 'Blue Lagoon', 'Geysers', 'Waterfalls', 'Glaciers'],
+  'Norway': ['Oslo', 'Bergen', 'Trondheim', 'Stavanger', 'Kristiansand', 'Tromsø', 'Lillehammer', 'Ålesund', 'Bodø', 'Narvik', 'Fjords', 'Northern Lights', 'Lofoten Islands', 'Geirangerfjord', 'Sognefjord'],
+  'Sweden': ['Stockholm', 'Gothenburg', 'Malmö', 'Uppsala', 'Västerås', 'Örebro', 'Linköping', 'Helsingborg', 'Jönköping', 'Norrköping', 'Stockholm Archipelago', 'Swedish Lapland', 'Vasa Museum', 'Drottningholm Palace', 'Visby'],
+  'Finland': ['Helsinki', 'Espoo', 'Tampere', 'Vantaa', 'Turku', 'Oulu', 'Kuopio', 'Jyväskylä', 'Lahti', 'Pori', 'Lapland', 'Northern Lights', 'Thousand Lakes', 'Sauna Culture', 'Icehotel'],
+  'Denmark': ['Copenhagen', 'Aarhus', 'Odense', 'Aalborg', 'Esbjerg', 'Randers', 'Kolding', 'Horsens', 'Silkeborg', 'Svendborg', 'Tivoli Gardens', 'Legoland', 'Kronborg Castle', 'Faroe Islands', 'Greenland'],
+  'Ireland': ['Dublin', 'Cork', 'Galway', 'Limerick', 'Waterford', 'Drogheda', 'Dundalk', 'Athlone', 'Sligo', 'Derry', 'Cliffs of Moher', 'Ring of Kerry', 'Giant\'s Causeway', 'Connemara', 'Aran Islands'],
+  'Scotland': ['Edinburgh', 'Glasgow', 'Aberdeen', 'Dundee', 'Inverness', 'Stirling', 'Perth', 'Ayr', 'Dumfries', 'Oban', 'Highlands', 'Loch Ness', 'Isle of Skye', 'Hebrides', 'Cairngorms'],
+  'Wales': ['Cardiff', 'Swansea', 'Newport', 'Wrexham', 'Bangor', 'St Davids', 'Caernarfon', 'Conwy', 'Llandudno', 'Brecon', 'Snowdonia', 'Pembrokeshire Coast', 'Brecon Beacons', 'Gower Peninsula', 'Snowdon'],
+  'Northern Ireland': ['Belfast', 'Derry', 'Lisburn', 'Armagh', 'Newry', 'Bangor', 'Carrickfergus', 'Ballymena', 'Coleraine', 'Dungannon', 'Giant\'s Causeway', 'Mourne Mountains', 'Lough Neagh', 'Carrick-a-Rede', 'Dark Hedges'],
   'Other': []
 }
 
@@ -117,6 +182,10 @@ export default function Home() {
   const [vibeFocused, setVibeFocused] = useState(false)
   const [cityInput, setCityInput] = useState('')
   const [cityFocused, setCityFocused] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState<Record<string, boolean>>({})
+  const [emojiPickerField, setEmojiPickerField] = useState<string | null>(null)
+  const [creditsReviewed, setCreditsReviewed] = useState(false)
+  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
   const [drafts, setDrafts] = useState<SavedDraft[]>(() => {
     try { return JSON.parse(localStorage.getItem('tourista_drafts') || '[]') } catch { return [] }
   })
@@ -298,11 +367,25 @@ export default function Home() {
       )
       if (!hasDay) { setPublishError('Please fill in at least one itinerary day.'); return }
     }
-    if (postStep === 3) { publishVlog(); return }
+    if (postStep === 3) {
+      if (!creditsReviewed) {
+        setPublishError('Please review and confirm the credits before publishing.')
+        return
+      }
+      // Check that at least one day is unlocked (free)
+      const hasFreeDays = itinDays.some(d => !d.locked && (d.activity.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()))
+      if (!hasFreeDays) {
+        setPublishError('Please unlock at least one itinerary day so tourists can preview your content.')
+        return
+      }
+      publishVlog()
+      return
+    }
     setPostStep(s => s + 1)
   }
   const prevStepFn = () => {
     setPublishError('')
+    setCreditsReviewed(false)
     if (postStep === 1) { go('browse'); return }
     setPostStep(s => s - 1)
   }
@@ -315,15 +398,43 @@ export default function Home() {
   const updDay = (i: number, k: keyof ItineraryFormDay, v: string | boolean | null) =>
     setItinDays(d => d.map((x, j) => j === i ? { ...x, [k]: v } : x))
 
+  const handleEmojiSelect = (fieldId: string, emoji: string) => {
+    const textarea = textareaRefs.current[fieldId]
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = textarea.value
+    const newText = text.substring(0, start) + emoji + text.substring(end)
+
+    // Update the field based on fieldId pattern
+    const match = fieldId.match(/^day-(\d+)-(.+)$/)
+    if (match) {
+      const dayIndex = parseInt(match[1])
+      const fieldName = match[2] as keyof ItineraryFormDay
+      updDay(dayIndex, fieldName, newText)
+    }
+
+    // Close emoji picker
+    setShowEmojiPicker(p => ({ ...p, [fieldId]: false }))
+    setEmojiPickerField(null)
+
+    // Restore cursor position
+    setTimeout(() => {
+      textarea.focus()
+      textarea.setSelectionRange(start + emoji.length, start + emoji.length)
+    }, 0)
+  }
+
   const handleDayMedia = async (i: number, file: File) => {
     const isVideo = file.type.startsWith('video/')
     const localUrl = URL.createObjectURL(file)
     const mediaType = isVideo ? 'video' : 'image'
 
-    // Add to media array
+    // Add to media array at the beginning (latest first)
     setItinDays(d => d.map((x, j) => j === i ? {
       ...x,
-      media: [...(x.media || []), { url: localUrl, type: mediaType }],
+      media: [{ url: localUrl, type: mediaType }, ...(x.media || [])],
       mediaCarouselIndex: 0
     } : x))
 
@@ -1589,10 +1700,12 @@ export default function Home() {
                             onClick={() => {
                               if (dayUploading[i]) return
                               const inp = document.createElement('input')
-                              inp.type = 'file'; inp.accept = 'image/*,video/*'
+                              inp.type = 'file'; inp.accept = 'image/*,video/*'; inp.multiple = true
                               inp.onchange = (e) => {
-                                const f = (e.target as HTMLInputElement).files?.[0]
-                                if (f) handleDayMedia(i, f)
+                                const files = (e.target as HTMLInputElement).files
+                                if (files) {
+                                  Array.from(files).forEach(f => handleDayMedia(i, f))
+                                }
                               }
                               inp.click()
                             }}
@@ -1607,38 +1720,134 @@ export default function Home() {
 
                         {/* Highlights */}
                         <div>
-                          <span className="day-sub-lbl">✨ Highlights</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                            <span className="day-sub-lbl">✨ Highlights</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmojiPickerField(emojiPickerField === `day-${i}-highlights` ? null : `day-${i}-highlights`)
+                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-highlights`]: !p[`day-${i}-highlights`] }))
+                              }}
+                              style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
+                              title="Add emoji"
+                            >
+                              😊
+                            </button>
+                          </div>
                           <textarea className="fi" style={{ minHeight:'100px' }}
+                            ref={el => { if (el) textareaRefs.current[`day-${i}-highlights`] = el }}
                             placeholder="What made this day special? e.g. Watched the sunset at Cloud 9, swam in the lagoon..."
                             value={d.highlights || ''}
                             onChange={e => updDay(i, 'highlights', e.target.value)}/>
+                          {emojiPickerField === `day-${i}-highlights` && (
+                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                              <EmojiPicker
+                                onEmojiClick={(e) => handleEmojiSelect(`day-${i}-highlights`, e.emoji)}
+                                width="100%"
+                                height={200}
+                                previewConfig={{ showPreview: false }}
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* Food tips */}
                         <div>
-                          <span className="day-sub-lbl">🍜 Food tips</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                            <span className="day-sub-lbl">🍜 Food tips</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmojiPickerField(emojiPickerField === `day-${i}-foodTips` ? null : `day-${i}-foodTips`)
+                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-foodTips`]: !p[`day-${i}-foodTips`] }))
+                              }}
+                              style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
+                              title="Add emoji"
+                            >
+                              😊
+                            </button>
+                          </div>
                           <textarea className="fi" style={{ minHeight:'100px' }}
+                            ref={el => { if (el) textareaRefs.current[`day-${i}-foodTips`] = el }}
                             placeholder="Best restaurants, must-try dishes, estimated meal cost..."
                             value={d.foodTips || ''}
                             onChange={e => updDay(i, 'foodTips', e.target.value)}/>
+                          {emojiPickerField === `day-${i}-foodTips` && (
+                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                              <EmojiPicker
+                                onEmojiClick={(e) => handleEmojiSelect(`day-${i}-foodTips`, e.emoji)}
+                                width="100%"
+                                height={200}
+                                previewConfig={{ showPreview: false }}
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* Getting around */}
                         <div>
-                          <span className="day-sub-lbl">🚌 Getting around</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                            <span className="day-sub-lbl">🚌 Getting around</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmojiPickerField(emojiPickerField === `day-${i}-gettingThere` ? null : `day-${i}-gettingThere`)
+                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-gettingThere`]: !p[`day-${i}-gettingThere`] }))
+                              }}
+                              style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
+                              title="Add emoji"
+                            >
+                              😊
+                            </button>
+                          </div>
                           <textarea className="fi" style={{ minHeight:'100px' }}
+                            ref={el => { if (el) textareaRefs.current[`day-${i}-gettingThere`] = el }}
                             placeholder="Transport used, how to get there, fare estimates..."
                             value={d.gettingThere || ''}
                             onChange={e => updDay(i, 'gettingThere', e.target.value)}/>
+                          {emojiPickerField === `day-${i}-gettingThere` && (
+                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                              <EmojiPicker
+                                onEmojiClick={(e) => handleEmojiSelect(`day-${i}-gettingThere`, e.emoji)}
+                                width="100%"
+                                height={200}
+                                previewConfig={{ showPreview: false }}
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* Tips */}
                         <div>
-                          <span className="day-sub-lbl">💡 Tips & budget breakdown</span>
+                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+                            <span className="day-sub-lbl">💡 Tips & budget breakdown</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmojiPickerField(emojiPickerField === `day-${i}-tips` ? null : `day-${i}-tips`)
+                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-tips`]: !p[`day-${i}-tips`] }))
+                              }}
+                              style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
+                              title="Add emoji"
+                            >
+                              😊
+                            </button>
+                          </div>
                           <textarea className="fi" style={{ minHeight:'100px' }}
+                            ref={el => { if (el) textareaRefs.current[`day-${i}-tips`] = el }}
                             placeholder="Money-saving tips, what to avoid, booking advice, entrance fees..."
                             value={d.tips || ''}
                             onChange={e => updDay(i, 'tips', e.target.value)}/>
+                          {emojiPickerField === `day-${i}-tips` && (
+                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                              <EmojiPicker
+                                onEmojiClick={(e) => handleEmojiSelect(`day-${i}-tips`, e.emoji)}
+                                width="100%"
+                                height={200}
+                                previewConfig={{ showPreview: false }}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1688,6 +1897,18 @@ export default function Home() {
                   <strong style={{ color:'var(--g1)', display:'block', marginBottom:'6px', fontSize:'14px' }}>✅ Ready to publish?</strong>
                   Your vlog will go live immediately. Tourists can browse your itinerary and pay credits to unlock locked days. Make sure costs are accurate.
                 </div>
+                <div style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'14px 16px', border:'1.5px solid var(--color-border-tertiary)', borderRadius:'12px', background:'var(--color-bg-secondary)', marginTop:'12px' }}>
+                  <input
+                    type="checkbox"
+                    id="credits-review-checkbox"
+                    checked={creditsReviewed}
+                    onChange={(e) => setCreditsReviewed(e.target.checked)}
+                    style={{ marginTop:'3px', cursor:'pointer', width:'18px', height:'18px', minWidth:'18px' }}
+                  />
+                  <label htmlFor="credits-review-checkbox" style={{ cursor:'pointer', fontSize:'13px', color:'var(--color-text-primary)', lineHeight:'1.5' }}>
+                    I've reviewed the credits and understand the pricing. I also confirm that at least one itinerary day is unlocked for tourists to preview.
+                  </label>
+                </div>
               </div>
             )})}
 
@@ -1703,7 +1924,7 @@ export default function Home() {
                 {postStep < 3 && (
                   <button className="bb" onClick={saveDraft}>Save draft</button>
                 )}
-                <button className="nb" onClick={nextStep} disabled={publishing}>
+                <button className="nb" onClick={nextStep} disabled={publishing || (postStep === 3 && !creditsReviewed)}>
                   {postStep === 3 ? (publishing ? 'Publishing…' : 'Publish →') : 'Continue →'}
                 </button>
               </div>

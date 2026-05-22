@@ -1,0 +1,320 @@
+﻿# Tourista Responsive Breakpoint Visual Guide
+
+## Desktop Layout (>900px)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Top Nav (56px) ────────────────────────────────────────────────│
+├─┬────────────────────────────────────────────────────────────────┤
+│ │ Logo    Search         Actions                    Post  Avatar │
+│ │                                                                 │
+│S├─────────────────────────────────────────────────────────────────┤
+│i│ Filters (286px)  │ Main Content (1600px max)                   │
+│d│                  │                                              │
+│e├─ Explore        │ ┌──────────────────────────┐                 │
+│  │ - Filters      │ │ Browse / Detail / etc.    │                 │
+│R├─ Dashboard     │ │                            │                 │
+│a│ - Notifications│ │ Content area              │                 │
+│i├─ Post (+)      │ │ (responsive grid/flex)    │                 │
+│l│                  │ │                            │                 │
+│ └─ Avatar        │ └──────────────────────────┘                 │
+│                  │                                              │
+└──────────────────┴──────────────────────────────────────────────┘
+```
+
+**Key Measurements:**
+- Nav height: 56px
+- Side rail: 58px fixed left
+- Filter panel: 286px fixed at left: 72px
+- Filter panel top: 82px (below nav)
+- Max content width: 1600px
+- Main content: Full width with margins
+
+---
+
+## Tablet Layout (900px - 1100px)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Top Nav (56px) ────────────────────────────────────────────│
+├─┬─────────────────────────────────────────────────────────────┤
+│ │ Logo    Search         Actions                 Post  Avatar │
+│ │                                                             │
+│S├─────────────────────────────────────────────────────────────┤
+│i│ Filters(hide on load) │ Main Content              │         
+│d│ ◄────────────────────  │                           │         
+│e│ (Hover/focus = slide) │ Browse / Detail / etc.    │         
+│R├─ Explore            │ │                           │         
+│a│ - Filters (toggle)  │ │ Content area              │         
+│i│ - Dashboard         │ │ (responsive)              │         
+│l│ - Post (+)          │ │                           │         
+│ └─ Avatar            │ │                           │         
+│                      │ └───────────────────────────┘         
+└──────────────────────┴──────────────────────────────────────┘
+
+Filter panel: transform: translateX(calc(-100% + 12px))
+On :hover/:focus-within: transform: translateX(0)
+```
+
+---
+
+## Mobile Layout (<900px)
+
+```
+┌──────────────────────────┐
+│ Nav (56px) ────────────│
+│ Logo  [Notif] [Dashboard] │
+│       [Post] [Profile]    │
+├──────────────────────────┤
+│ Main Content             │
+│ (max-width: 560px)      │
+│                          │
+│ Filters (inline)        │
+│ [Vibe] [Region] [Budget]│
+│                          │
+│ Vlog List (flex column) │
+│ ┌────────────────────┐  │
+│ │ [Thumb] Title      │  │
+│ │         Location   │  │
+│ └────────────────────┘  │
+│                          │
+│ ┌────────────────────┐  │
+│ │ [Thumb] Title      │  │
+│ │         Location   │  │
+│ └────────────────────┘  │
+│                          │
+├──────────────────────────┤
+│ Tabs (37px) ───────────│
+│ [Explore ×] [Detail ×]  │
+│ [Profile] [Post] ...    │
+└──────────────────────────┘
+
+Content wrapper:
+  max-width: 560px
+  padding: 24px 20px 56px
+  margin: 0 auto
+```
+
+---
+
+## Detail Page Layout (All Breakpoints)
+
+```
+Mobile (560px) & Desktop (>900px): Same content, different context
+
+┌─────────────────────────────────────────────┐
+│ ← Back to [Explore / Profile / Dashboard]   │ (Order: 0)
+├─────────────────────────────────────────────┤
+│                                              │
+│ [Video Player] (16:9 or 4:5)                │ (Order: 1)
+│ [Embed or Preview + Play Button]            │
+│                                              │
+├─────────────────────────────────────────────┤
+│ [Like] [Comment] [Share] [Save]             │ (Order: 2)
+├─────────────────────────────────────────────┤
+│ "Amazing Siargao Trip" [Title]              │ (Order: 3)
+├─────────────────────────────────────────────┤
+│ [Avatar] Maria Santos    [Follow]           │ (Order: 4)
+│          15 vlogs · 2.4k followers          │
+├─────────────────────────────────────────────┤
+│ ₱15,000  7 days  ★4.8  38k views          │ (Order: 5, grid 4-col)
+├─────────────────────────────────────────────┤
+│ Incredible island getaway with stunning...  │ (Order: 6)
+├─────────────────────────────────────────────┤
+│ Unlock full itinerary [2 credits] [Unlock] │ (Order: 7)
+├─────────────────────────────────────────────┤
+│ DAY-BY-DAY ITINERARY                        │
+│ Day 1 • Island hopping              ✓ Free  │
+│ Day 2 • Lagoon exploring            🔒 1cr  │
+│ Day 3 • Beach sunset                🔒 1cr  │
+├─────────────────────────────────────────────┤
+│ REVIEWS (12)                                │
+│ ⭐⭐⭐⭐⭐ John D. - "Perfect guide!"  │
+│ [Share your experience...] [Post]           │
+└─────────────────────────────────────────────┘
+
+CSS Ordering Applied:
+  .w:has(> .bk) > .bk { order: 0 }
+  .w:has(> .bk) > .vbox { order: 1 }
+  .w:has(> .bk) > .eng { order: 2 }
+  .w:has(> .bk) > .dtt { order: 3 }
+  .w:has(> .bk) > .dvl { order: 4 }
+  .w:has(> .bk) > .s4 { order: 5 }
+  .w:has(> .bk) > .dd { order: 6 }
+  .w:has(> .bk) > .ulb { order: 7 }
+```
+
+---
+
+## Grid Systems Visualization
+
+### 1. Profile Video Grid (2-column)
+```
+Mobile (1 col)          Tablet/Desktop (2 col)
+┌──────────┐            ┌──────────┐ ┌──────────┐
+│ [Video 1]│            │ [Video 1]│ │ [Video 2]│
+└──────────┘            └──────────┘ └──────────┘
+┌──────────┐            ┌──────────┐ ┌──────────┐
+│ [Video 2]│            │ [Video 3]│ │ [Video 4]│
+└──────────┘            └──────────┘ └──────────┘
+
+.vg {
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+```
+
+### 2. Dashboard Stats Grid (4-column)
+```
+Mobile (1 col)   Tablet (2 col)      Desktop (4 col)
+┌────────────┐   ┌────────┐ ┌────────┐   ┌────┐ ┌────┐ ┌────┐ ┌────┐
+│ Earnings   │   │Earnings│ │Credits │   │Earn│ │Cred│ │View│ │Vlog│
+│ ₱4,320     │   │ ₱4,320 │ │  432   │   │4.3k│ │432 │ │38k │ │ 48 │
+└────────────┘   └────────┘ └────────┘   └────┘ └────┘ └────┘ └────┘
+┌────────────┐   ┌────────┐ ┌────────┐
+│ Credits    │   │ Views  │ │ Vlogs  │
+│   432      │   │  38k   │ │   48   │
+└────────────┘   └────────┘ └────────┘
+
+.kpig {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+}
+
+@media (max-width: 900px) {
+  /* Still 4-col but smaller cards, or adapt via media query */
+}
+```
+
+### 3. Browse Grid (Google Images Style)
+```
+auto-fill allows responsive columns without media query
+
+220px columns (Desktop)     150px columns (Mobile < 640px)
+┌──────┐ ┌──────┐ ┌──────┐  ┌─────┐ ┌─────┐ ┌─────┐
+│Video1│ │Video2│ │Video3│  │V1  │ │V2  │ │V3  │
+└──────┘ └──────┘ └──────┘  └─────┘ └─────┘ └─────┘
+┌──────┐ ┌──────┐ ┌──────┐  ┌─────┐ ┌─────┐ ┌─────┐
+│Video4│ │Video5│ │Video6│  │V4  │ │V5  │ │V6  │
+└──────┘ └──────┘ └──────┘  └─────┘ └─────┘ └─────┘
+
+.gi-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+```
+
+---
+
+## Navigation State Machine
+
+```
+                    ┌─── Browse (default)
+                    │     ├─ Search, filters
+                    │     ├─ Vlog list (flex column)
+                    │     └─ Click card → openD('browse', id)
+                    │              │
+        ┌───────────┼───────────────┼─────────────────┐
+        │           │               │                 │
+    ┌─────────┐ ┌─────────┐   ┌──────────┐     ┌──────────┐
+    │ Detail  │ │Profile  │   │Dashboard │     │   Post   │
+    │ (video, │ │(vlogs & │   │(earnings,│     │(3 steps) │
+    │ reviews,│  stats)  │   │ stats)   │     └──────────┘
+    │itinerary)└─────────┘   └──────────┘           ↑
+    │  ↓          ↓              ↓                   │
+    │ Back      Edit ────→   Click Post    Back only
+    │ returns   (edit form)   opens Post   in Preview
+    │ prev                                 
+    │
+    └─ prev saved for smart back navigation
+
+openD(from, vlogId):
+  setPrev(from)       // Save context
+  setPage('detail')   // Switch view
+  fetchVlog(vlogId)   // Load data
+
+go(page):
+  setPrev(page)       // Prepare for next back
+  setPage(page)       // Switch view
+```
+
+---
+
+## CSS Selector Patterns Used
+
+### 1. Display Control
+```css
+.page { display: none }
+.page.on { display: block }
+
+/* Only one page visible at a time */
+```
+
+### 2. State Styling
+```css
+.on { color: var(--g); }              /* Active color */
+.on { background: var(--gl); }        /* Active background */
+.tb.on { border-bottom-color: var(--g) }  /* Active tab */
+```
+
+### 3. Responsive Containers
+```css
+/* Base: 560px max (mobile) */
+.w { max-width: 560px; margin: 0 auto; padding: 24px 20px 56px }
+
+/* Desktop: up to 1600px */
+.topnav-inner { max-width: 1600px }
+.tn-page { max-width: 1600px }
+```
+
+### 4. Conditional Display
+```css
+/* Desktop only */
+.side-rail { display: none }
+@media (min-width: 900px) {
+  .side-rail { display: flex }
+  .tabs { display: none }
+}
+
+/* Mobile only */
+@media (max-width: 900px) {
+  .side-rail { display: none }
+  .tabs { display: flex }
+}
+```
+
+### 5. Flex & Grid Layouts
+```css
+/* Flex: Vlog list */
+.vl { display: flex; flex-direction: column; gap: 1px }
+
+/* Grid: Profile videos */
+.vg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px }
+
+/* Grid: Stats */
+.s4 { display: grid; grid-template-columns: repeat(4, 1fr) }
+
+/* Flex: Detail page ordering */
+.w:has(> .bk) { display: flex; flex-direction: column }
+.w:has(> .bk) > .* { order: 0-20 }
+```
+
+---
+
+## Responsive Design Checklist
+
+When adding new components:
+
+- [ ] Mobile-first: Start with default CSS, enhance at breakpoints
+- [ ] Max-width: Constrain to 560px on mobile, 1600px on desktop
+- [ ] Padding: 24px horizontal on mobile, more on desktop
+- [ ] Navigation: Consider 56px nav + 37px tabs on mobile
+- [ ] Visibility: Use `.on` class for active states
+- [ ] Grid vs Flex: Grid for cards, Flex for lists/buttons
+- [ ] Testing: Check at 360px, 640px, 900px, 1100px, 1600px
+
