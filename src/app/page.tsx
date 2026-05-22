@@ -1906,7 +1906,7 @@ export default function Home() {
                     style={{ marginTop:'3px', cursor:'pointer', width:'18px', height:'18px', minWidth:'18px' }}
                   />
                   <label htmlFor="credits-review-checkbox" style={{ cursor:'pointer', fontSize:'13px', color:'var(--color-text-primary)', lineHeight:'1.5' }}>
-                    I've reviewed the credits and understand the pricing. I also confirm that at least one itinerary day is unlocked for tourists to preview.
+                    I&apos;ve reviewed the credits and understand the pricing. I also confirm that at least one itinerary day is unlocked for tourists to preview.
                   </label>
                 </div>
               </div>
