@@ -10,9 +10,7 @@ interface VlogAuthor {
 }
 interface ItineraryDay {
   id: string; day: number; activity: string; cost?: number | null
-  description?: string | null; clipDuration?: string | null
-  clipDescription?: string | null; locked: boolean
-  highlights?: string | null; foodTips?: string | null
+  locked: boolean; highlights?: string | null; foodTips?: string | null
   gettingThere?: string | null; tips?: string | null
 }
 interface Review {
@@ -26,10 +24,8 @@ interface VlogCard {
   tiktokUrl?: string | null; instagramUrl?: string | null; duration?: number | null; coverImage?: string | null
 }
 interface VlogDetail extends VlogCard {
-  country: string; region: string; vibe: string; duration?: number | null
-  description?: string | null; youtubeUrl?: string | null; facebookUrl?: string | null
-  tiktokUrl?: string | null; instagramUrl?: string | null; ratingCount: number
-  coverImage?: string | null; itinerary: ItineraryDay[]; reviews: Review[]
+  country: string; region: string; vibe: string; ratingCount: number
+  itinerary: ItineraryDay[]; reviews: Review[]
 }
 interface UserProfile {
   id: string; handle: string; name: string; bio?: string | null; tagline?: string | null
@@ -254,32 +250,17 @@ export default function Home() {
   useEffect(() => { fetchMyVlogs() }, [fetchMyVlogs])
   useEffect(() => { fetchProfile() }, [fetchProfile])
   useEffect(() => {
-    if (!vlogs.length) return
-    setActiveFeedId(current => current ?? vlogs[0]?.id ?? null)
-
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries
-        .filter(entry => entry.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
-
-      if (visible?.target instanceof HTMLElement) {
-        setActiveFeedId(visible.target.dataset.vlogId || null)
-      }
-    }, { threshold: [0.55, 0.75], rootMargin: '-12% 0px -18%' })
-
-    vlogs.forEach(v => {
-      const node = feedRefs.current[v.id]
-      if (node) observer.observe(node)
-    })
-
-    return () => observer.disconnect()
-  }, [vlogs])
+    if (!activeFeedId) return
+    if (!vlogs.some(v => v.id === activeFeedId)) {
+      setActiveFeedId(null)
+      setVlog(null)
+    }
+  }, [activeFeedId, vlogs])
 
   /* ══════════════════════════════════════════
      Navigation
   ══════════════════════════════════════════ */
   const go = (p: string) => { setPrev(page); setPage(p) }
-  const closeT = () => setPage('browse')
 
   const openD = async (from: string, vlogId?: string) => {
     setPrev(from); setPage('detail'); setUnlocked(false); setReviewText('')
@@ -298,11 +279,19 @@ export default function Home() {
   const getEmbedUrl = (url: string) => {
     const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\s?]+)/)
     if (yt) return `https://www.youtube.com/embed/${yt[1]}?controls=1&rel=0`
+    const ytSearch = url.match(/youtube\.com\/results\?search_query=([^&]+)/)
+    if (ytSearch) return `https://www.youtube.com/embed?listType=search&list=${ytSearch[1]}&controls=1&rel=0`
     return null
   }
+  const withAutoplay = (url: string) => `${url}${url.includes('?') ? '&' : '?'}autoplay=1&mute=1&playsinline=1`
   const getFeedEmbedUrl = (v: VlogCard) => {
     const base = v.youtubeUrl ? getEmbedUrl(v.youtubeUrl) : null
-    return base ? `${base}&autoplay=1&mute=1&playsinline=1` : null
+    return base ? withAutoplay(base) : null
+  }
+  const getVlogEmbedUrl = (url?: string | null) => {
+    if (!url) return null
+    const base = getEmbedUrl(url)
+    return base ? withAutoplay(base) : null
   }
 
   const detectVideo = (url: string) => {
@@ -349,12 +338,6 @@ export default function Home() {
   /* ══════════════════════════════════════════
      Post vlog
   ══════════════════════════════════════════ */
-  const isValidNumber = (s: string) => {
-    if (!s.trim()) return true
-    const cleaned = s.replace(/[₱$,\s]/g, '').replace(/\s*(days?|nights?|weeks?)\s*$/i, '')
-    return /^\d+(\.\d{1,2})?$/.test(cleaned)
-  }
-
   const nextStep = () => {
     setPublishError('')
     if (postStep === 1) {
@@ -366,6 +349,7 @@ export default function Home() {
         d.activity.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
       )
       if (!hasDay) { setPublishError('Please fill in at least one itinerary day.'); return }
+      setPostForm(f => ({ ...f, credits: calculateCreditsFromCost() }))
     }
     if (postStep === 3) {
       if (!creditsReviewed) {
@@ -447,13 +431,14 @@ export default function Home() {
         media: (x.media || []).map(m => m.url === localUrl ? { ...m, url } : m)
       } : x))
       URL.revokeObjectURL(localUrl)
-    } catch {
+    } catch (e) {
       // Remove from media array on error
       setItinDays(d => d.map((x, j) => j === i ? {
         ...x,
         media: (x.media || []).filter(m => m.url !== localUrl)
       } : x))
       URL.revokeObjectURL(localUrl)
+      setPublishError(e instanceof Error ? e.message : 'Media upload failed. Please try again.')
     } finally {
       setDayUploading(p => ({ ...p, [i]: false }))
     }
@@ -469,28 +454,57 @@ export default function Home() {
       const filledDays = itinDays.filter(d =>
         d.activity.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
       )
-      const calculatedCredits = calculateCreditsFromCost()
+      if (coverUploading || Object.values(dayUploading).some(Boolean)) {
+        setPublishError('Please wait for uploads to finish before publishing.')
+        return
+      }
+      if (postForm.coverImage?.startsWith('blob:')) {
+        setPublishError('Cover photo is still uploading or failed. Please re-upload it before publishing.')
+        return
+      }
       const r = await fetch('/api/vlogs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...postForm,
-          credits: calculatedCredits,
+          credits: Math.max(0, Number(postForm.credits) || 0),
           youtubeUrl: isYt ? videoUrl : (altLinks.fb.includes('youtube') || altLinks.fb.includes('youtu.be') ? altLinks.fb : null),
           facebookUrl: isFb ? videoUrl : (altLinks.fb.includes('facebook') || altLinks.fb.includes('fb.com') ? altLinks.fb : null),
           tiktokUrl: isTt ? videoUrl : (altLinks.tt || null),
           instagramUrl: isIg ? videoUrl : (altLinks.ig || null),
-          itinerary: filledDays,
+          itinerary: filledDays.map(day => ({
+            ...day,
+            media: day.media?.filter(m => !m.url.startsWith('blob:')) || [],
+          })),
         }),
       })
       if (!r.ok) { const e = await r.json().catch(() => ({})); setPublishError(e.error || 'Failed to publish. Please try again.'); return }
+      const created: VlogCard = await r.json()
+      setSelectedMyVlogId(created.id)
+      setDashboardMode('details')
+      setVlogLoading(true)
+      setMyVlogs(current => [created, ...current.filter(v => v.id !== created.id)])
       fetchVlogs()
       fetchMyVlogs()
+      go('dashboard')
+      try {
+        const detailRes = await fetch(`/api/vlogs/${created.id}`)
+        if (detailRes.ok) {
+          const detail: VlogDetail = await detailRes.json()
+          setVlog(detail)
+          setLikeCount(detail.likes)
+          setLiked(false)
+          setUnlocked(false)
+          setReviewText('')
+        }
+      } finally {
+        setVlogLoading(false)
+      }
       setPostForm({ ...defaultPostForm })
       setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' }); setPostStep(1)
       setVibeInput(''); setVibeFocused(false)
       setItinDays(defaultItinDays.map(d => ({ ...d })))
-      go('dashboard')
-    } catch { setPublishError('Network error. Please try again.')
+    } catch (e) {
+      setPublishError(e instanceof Error ? `Network error: ${e.message}` : 'Network error. Please try again.')
     } finally { setPublishing(false) }
   }
 
@@ -562,9 +576,13 @@ export default function Home() {
   }
 
   const handleUpload = async (file: File) => {
+    if (file.size > 25 * 1024 * 1024) throw new Error('File is too large. Please upload a file under 25MB.')
     const fd = new FormData(); fd.append('file', file)
     const r = await fetch('/api/upload', { method: 'POST', body: fd })
-    if (!r.ok) throw new Error('Upload failed')
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}))
+      throw new Error(e.error || 'Upload failed')
+    }
     return (await r.json()).url as string
   }
 
@@ -576,8 +594,10 @@ export default function Home() {
       const url = await handleUpload(file)
       setPostForm(p => ({ ...p, coverImage: url }))
       setTimeout(() => URL.revokeObjectURL(localUrl), 5000)
-    } catch {
-      setPublishError('Cover photo upload failed. Please try again.')
+    } catch (e) {
+      setPostForm(p => ({ ...p, coverImage: '' }))
+      URL.revokeObjectURL(localUrl)
+      setPublishError(e instanceof Error ? e.message : 'Cover photo upload failed. Please try again.')
     } finally {
       setCoverUploading(false)
     }
@@ -600,7 +620,7 @@ export default function Home() {
     return cur === 'JPY' ? `¥${cost.toLocaleString()}` : `₱${cost.toLocaleString()}`
   }
   const activeFilters = [vibe !== 'All vlogs' ? vibe : '', region !== 'All regions' ? region : '', budget !== 'Any budget' ? budget : ''].filter(Boolean)
-  const embedUrl = vlog?.youtubeUrl ? getEmbedUrl(vlog.youtubeUrl) : null
+  const embedUrl = getVlogEmbedUrl(vlog?.youtubeUrl)
   const updCr = (v: number) => {
     setPostForm(f => ({ ...f, credits: v }))
   }
@@ -777,6 +797,7 @@ export default function Home() {
                       ref={node => { feedRefs.current[v.id] = node }}
                       onClick={async () => {
                         setActiveFeedId(v.id)
+                        setVlog(null)
                         setUnlocked(false)
                         setReviewText('')
                         setVlogLoading(true)
@@ -791,8 +812,10 @@ export default function Home() {
                         }
                       }}
                     >
-                      <div className={`gi-thumb ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
-                        {feedEmbed ? (
+                      <div className={`gi-thumb ${v.thumbnailColor}`}>
+                        {v.coverImage ? (
+                          <img src={v.coverImage} alt={v.title}/>
+                        ) : feedEmbed ? (
                           <iframe src={feedEmbed} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={v.title}/>
                         ) : (
                           <>
@@ -817,8 +840,8 @@ export default function Home() {
             )}
 
             {/* Detail Panel (right side on desktop, bottom sheet on mobile) */}
-            {vlog && activeFeedId && (
-              <div className="gi-panel">
+            {vlog && activeFeedId && vlog.id === activeFeedId && (
+              <div key={vlog.id} className="gi-panel">
                 <div className="gi-panel-header">
                   <div className="gi-panel-source">
                     <div className={`gi-panel-source-icon av ${vlog.author.avatarColor}`}>{vlog.author.initials}</div>
@@ -838,7 +861,7 @@ export default function Home() {
                   {/* Media */}
                   <div className={`gi-panel-media${vlog.coverImage ? '' : ' ' + vlog.thumbnailColor}`}>
                     {embedUrl ? (
-                      <iframe src={embedUrl} width="100%" height="100%" allowFullScreen title={vlog.title}/>
+                      <iframe src={embedUrl} width="100%" height="100%" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={vlog.title}/>
                     ) : vlog.coverImage ? (
                       <img src={vlog.coverImage} alt={vlog.title}/>
                     ) : (
@@ -852,6 +875,30 @@ export default function Home() {
                     <button className="gi-panel-zoom" title="Expand">
                       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
                     </button>
+                  </div>
+
+                  <div className="won" style={{ marginTop:0, marginBottom:'14px' }}>
+                    <span>Watch on:</span>
+                    {vlog.youtubeUrl ? (
+                      <a href={vlog.youtubeUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                        <span className="pdot" style={{ background:'#f00' }}/> YouTube â†—
+                      </a>
+                    ) : null}
+                    {vlog.facebookUrl ? (
+                      <a href={vlog.facebookUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                        <span className="pdot" style={{ background:'#1877f2' }}/> Facebook â†—
+                      </a>
+                    ) : null}
+                    {vlog.tiktokUrl ? (
+                      <a href={vlog.tiktokUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                        <span className="pdot" style={{ background:'#111' }}/> TikTok â†—
+                      </a>
+                    ) : null}
+                    {vlog.instagramUrl ? (
+                      <a href={vlog.instagramUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                        <span className="pdot" style={{ background:'#e1306c' }}/> Instagram â†—
+                      </a>
+                    ) : null}
                   </div>
 
                   {/* Title & Meta */}
@@ -911,8 +958,7 @@ export default function Home() {
                             </div>
                           ) : (
                             <>
-                              {day.description && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>{day.description}</div>}
-                              {day.highlights && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>✨ {day.highlights}</div>}
+                                                            {day.highlights && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>✨ {day.highlights}</div>}
                               {day.foodTips && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>🍜 {day.foodTips}</div>}
                             </>
                           )}
@@ -960,9 +1006,11 @@ export default function Home() {
               <>
                 {/* Video */}
                 <div className="vbox">
-                  <div className={`vpl ${vlog.thumbnailColor}`}>
+                  <div className={`vpl ${vlog.coverImage ? '' : vlog.thumbnailColor}`}>
                     {embedUrl ? (
-                      <iframe src={embedUrl} width="100%" height="100%" allowFullScreen title={vlog.title}/>
+                      <iframe src={embedUrl} width="100%" height="100%" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={vlog.title}/>
+                    ) : vlog.coverImage ? (
+                      <img src={vlog.coverImage} alt={vlog.title}/>
                     ) : (
                       <>
                         <div className="vbadge">Preview</div>
@@ -982,7 +1030,16 @@ export default function Home() {
                         <span className="pdot" style={{ background:'#1877f2' }}/> Facebook ↗
                       </a>
                     ) : <div className="pp"><span className="pdot" style={{ background:'#1877f2' }}/> Facebook ↗</div>}
-                    <div className="pp"><span className="pdot" style={{ background:'#111' }}/> TikTok ↗</div>
+                    {vlog.tiktokUrl ? (
+                      <a href={vlog.tiktokUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                        <span className="pdot" style={{ background:'#111' }}/> TikTok ↗
+                      </a>
+                    ) : <div className="pp"><span className="pdot" style={{ background:'#111' }}/> TikTok ↗</div>}
+                    {vlog.instagramUrl ? (
+                      <a href={vlog.instagramUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                        <span className="pdot" style={{ background:'#e1306c' }}/> Instagram ↗
+                      </a>
+                    ) : null}
                     <span style={{ fontSize:'11px', color:'var(--color-text-secondary)' }}>Same vlog · pick your platform</span>
                   </div>
                 </div>
@@ -1078,19 +1135,10 @@ export default function Home() {
                           </div>
                         ) : (
                           <>
-                            {day.description && <div className="idc">{day.description}</div>}
                             {day.highlights && <div className="idc"><strong>✨ Highlights:</strong> {day.highlights}</div>}
                             {day.foodTips && <div className="idc"><strong>🍜 Food tips:</strong> {day.foodTips}</div>}
                             {day.gettingThere && <div className="idc"><strong>🚌 Getting around:</strong> {day.gettingThere}</div>}
                             {day.tips && <div className="idc"><strong>💡 Tips:</strong> {day.tips}</div>}
-                            {day.clipDuration && (
-                              <div className="iclr">
-                                <div className={`icth ${vlog.thumbnailColor}`}>
-                                  <div className="icp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
-                                </div>
-                                <span className="iclbl">{day.clipDuration} clip — {day.clipDescription}</span>
-                              </div>
-                            )}
                           </>
                         )}
                       </div>
@@ -1176,7 +1224,7 @@ export default function Home() {
                   <div className="vg" style={{ marginBottom:'0' }}>
                     {vlogs.filter(v => pinnedVlogIds.has(v.id)).map((v) => (
                       <div key={v.id} className="vgc" style={{ position:'relative', outline:'2px solid var(--g)', outlineOffset:'-2px', borderRadius:'12px' }} onClick={() => openD('profile', v.id)}>
-                        <div className={`vgth ${v.thumbnailColor}`}>
+                        <div className={`vgth ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
                           <div className="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
                         </div>
                         <div className="vgi">
@@ -1201,7 +1249,7 @@ export default function Home() {
               <div className="vg">
                 {vlogs.slice(0,4).map((v) => (
                   <div key={v.id} className="vgc" style={{ position:'relative' }} onClick={() => openD('profile', v.id)}>
-                    <div className={`vgth ${v.thumbnailColor}`}>
+                    <div className={`vgth ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
                       <div className="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
                     </div>
                     <div className="vgi">
@@ -1308,17 +1356,11 @@ export default function Home() {
             {/* ── Drafts-only view ── */}
             {postView === 'drafts' && (
               <div>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'20px' }}>
+                <div style={{ marginBottom:'20px' }}>
                   <div>
                     <div style={{ fontSize:'22px', fontWeight:800, color:'var(--color-text-primary)' }}>Saved drafts</div>
                     <div style={{ fontSize:'13.5px', color:'var(--color-text-secondary)', marginTop:'2px' }}>Pick up where you left off, or start fresh.</div>
                   </div>
-                  <button className="nb" onClick={() => {
-                    setPostForm({ ...defaultPostForm })
-                    setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' })
-                    setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError('')
-                    setPostView('form')
-                  }}>+ New vlog</button>
                 </div>
                 {drafts.length === 0 ? (
                   <div style={{ textAlign:'center', padding:'48px 0', color:'var(--color-text-secondary)', fontSize:'14px' }}>No saved drafts yet.</div>
@@ -1601,7 +1643,7 @@ export default function Home() {
                     {d.expanded && (
                       <div className="day-body">
                         {/* Cost field for all days */}
-                        <div>
+                        <div className="emoji-field">
                           <span className="day-sub-lbl">💰 Cost for this day</span>
                           <input className="fi" type="text" placeholder="e.g. ₱2,500"
                             value={d.cost} onChange={e => updDay(i, 'cost', e.target.value)}/>
@@ -1740,11 +1782,11 @@ export default function Home() {
                             value={d.highlights || ''}
                             onChange={e => updDay(i, 'highlights', e.target.value)}/>
                           {emojiPickerField === `day-${i}-highlights` && (
-                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                            <div className="emoji-popover">
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-highlights`, e.emoji)}
-                                width="100%"
-                                height={200}
+                                width={320}
+                                height={330}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -1752,7 +1794,7 @@ export default function Home() {
                         </div>
 
                         {/* Food tips */}
-                        <div>
+                        <div className="emoji-field">
                           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
                             <span className="day-sub-lbl">🍜 Food tips</span>
                             <button
@@ -1773,11 +1815,11 @@ export default function Home() {
                             value={d.foodTips || ''}
                             onChange={e => updDay(i, 'foodTips', e.target.value)}/>
                           {emojiPickerField === `day-${i}-foodTips` && (
-                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                            <div className="emoji-popover">
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-foodTips`, e.emoji)}
-                                width="100%"
-                                height={200}
+                                width={320}
+                                height={330}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -1785,7 +1827,7 @@ export default function Home() {
                         </div>
 
                         {/* Getting around */}
-                        <div>
+                        <div className="emoji-field">
                           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
                             <span className="day-sub-lbl">🚌 Getting around</span>
                             <button
@@ -1806,11 +1848,11 @@ export default function Home() {
                             value={d.gettingThere || ''}
                             onChange={e => updDay(i, 'gettingThere', e.target.value)}/>
                           {emojiPickerField === `day-${i}-gettingThere` && (
-                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                            <div className="emoji-popover">
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-gettingThere`, e.emoji)}
-                                width="100%"
-                                height={200}
+                                width={320}
+                                height={330}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -1818,7 +1860,7 @@ export default function Home() {
                         </div>
 
                         {/* Tips */}
-                        <div>
+                        <div className="emoji-field">
                           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
                             <span className="day-sub-lbl">💡 Tips & budget breakdown</span>
                             <button
@@ -1839,11 +1881,11 @@ export default function Home() {
                             value={d.tips || ''}
                             onChange={e => updDay(i, 'tips', e.target.value)}/>
                           {emojiPickerField === `day-${i}-tips` && (
-                            <div style={{ marginTop:'8px', position:'relative', zIndex:100 }}>
+                            <div className="emoji-popover">
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-tips`, e.emoji)}
-                                width="100%"
-                                height={200}
+                                width={320}
+                                height={330}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -1869,6 +1911,8 @@ export default function Home() {
                 const num = parseInt(cleaned) || 0
                 return sum + num
               }, 0)
+              const selectedCredits = Math.max(0, Number(postForm.credits) || 0)
+              const maxCredits = Math.max(20, calculatedCredits * 2, selectedCredits)
               return (
               <div>
                 <div className="fg">
@@ -1876,19 +1920,48 @@ export default function Home() {
                   <div className="crc">
                     <div className="crt">
                       <span className="crl">Credits per tourist</span>
-                      <span className="crv">{calculatedCredits === 0 ? 'Free' : `${calculatedCredits} credit${calculatedCredits > 1 ? 's' : ''}`}</span>
+                      <span className="crv">{selectedCredits === 0 ? 'Free' : `${selectedCredits} credit${selectedCredits > 1 ? 's' : ''}`}</span>
                     </div>
                     <div style={{ padding: '12px 14px', background: 'var(--color-bg-secondary)', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
-                      <strong style={{ color: 'var(--color-text-primary)' }}>How we calculated this:</strong>
+                      <strong style={{ color: 'var(--color-text-primary)' }}>Recommended value:</strong>
                       <div style={{ marginTop: '8px', fontSize: '12px', lineHeight: '1.6' }}>
                         Total itinerary cost: <strong>₱{totalDayCost.toLocaleString()}</strong><br/>
                         ÷ ₱75 per credit = <strong>{calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}</strong>
                       </div>
                     </div>
+                    <div className="credit-ruler">
+                      <div className="credit-ruler-top">
+                        <span>Free</span>
+                        <span>Recommended: {calculatedCredits}</span>
+                        <span>{maxCredits} credits</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={maxCredits}
+                        step={1}
+                        value={selectedCredits}
+                        onChange={e => updCr(parseInt(e.target.value, 10))}
+                        className="credit-range"
+                        aria-label="Credits per tourist"
+                      />
+                      <div className="credit-ruler-bottom">
+                        <button type="button" className="credit-mini" onClick={() => updCr(calculatedCredits)}>Use recommended</button>
+                        <input
+                          type="number"
+                          min={0}
+                          max={maxCredits}
+                          value={selectedCredits}
+                          onChange={e => updCr(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          className="credit-number"
+                          aria-label="Custom credits"
+                        />
+                      </div>
+                    </div>
                     <div className="cri">
-                      {calculatedCredits === 0
+                      {selectedCredits === 0
                         ? 'Free vlog — great for building your audience.'
-                        : <>At {calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''} · ₱{calculatedCredits * 10} per tourist · 80% to you = <strong>₱{calculatedCredits * 8}</strong>. Est. 50 unlocks/month = <strong>₱{(calculatedCredits * 8 * 50).toLocaleString()} passive income</strong></>
+                        : <>At {selectedCredits} credit{selectedCredits > 1 ? 's' : ''} at PHP {selectedCredits * 10} per tourist, 80% to you = <strong>PHP {selectedCredits * 8}</strong>. Est. 50 unlocks/month = <strong>PHP {(selectedCredits * 8 * 50).toLocaleString()} passive income</strong></>
                       }
                     </div>
                   </div>
@@ -1910,7 +1983,7 @@ export default function Home() {
                   </label>
                 </div>
               </div>
-            )})}
+            )})()}
 
             {publishError && (
               <div className="ferr">
@@ -2015,14 +2088,13 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'11px' }}>
+                <div style={{ marginBottom:'11px' }}>
                   <span style={{ fontSize:'14px', fontWeight:600 }}>My vlogs</span>
-                  <button className="nb" style={{ fontSize:'12px', padding:'7px 14px' }} onClick={() => { setPostStep(1); setDashboardMode('post'); setSelectedMyVlogId(null) }}>+ New vlog</button>
                 </div>
                 <div className="vl2">
                   {myVlogs.length === 0 ? (
                     <div style={{ padding:'20px', textAlign:'center', color:'var(--color-text-secondary)', fontSize:'13px' }}>
-                      No vlogs yet. <span style={{ color:'var(--g)', cursor:'pointer', fontWeight:600 }} onClick={() => { setPostStep(1); setDashboardMode('post'); setSelectedMyVlogId(null) }}>Post your first vlog →</span>
+                      No vlogs yet. <span style={{ color:'var(--g)', cursor:'pointer', fontWeight:600 }} onClick={() => { setPostForm({ ...defaultPostForm }); setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' }); setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError(''); setVibeInput(''); setVibeFocused(false); setPostView('form'); go('post') }}>Post your first vlog →</span>
                     </div>
                   ) : myVlogs.map(v => (
                     <div
@@ -2031,9 +2103,9 @@ export default function Home() {
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        console.log('Dashboard vlog card clicked:', v.id)
                         setSelectedMyVlogId(v.id)
                         setDashboardMode('details')
+                        setVlog(null)
                         setVlogLoading(true)
                         try {
                           const r = await fetch(`/api/vlogs/${v.id}`)
@@ -2048,7 +2120,7 @@ export default function Home() {
                         }
                       }}
                     >
-                      <div className={`vt2 ${v.thumbnailColor}`}/>
+                      <div className={`vt2 ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}/>
                       <div style={{ flex:1 }}>
                         <div className="vn2">{v.title.length > 36 ? v.title.slice(0,36)+'…' : v.title}</div>
                         <span className="vs2">{v.views >= 1000 ? `${(v.views/1000).toFixed(1)}k` : v.views} views · {v.credits > 0 ? `${v.credits} unlocks` : 'free vlog'}</span>
@@ -2060,187 +2132,9 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right Panel - Vlog Details or Post Form */}
-            {(selectedMyVlogId || dashboardMode !== 'list') && (
-              <div className="gi-panel">
-                {/* POST FORM MODE */}
-                {dashboardMode === 'post' && (
-                  <div style={{ padding:'20px', overflowY:'auto', height:'100%' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
-                      <div style={{ fontSize:'18px', fontWeight:700 }}>Post a new vlog</div>
-                      <button className="gi-panel-close" onClick={() => { setDashboardMode('list'); setPostStep(1) }}>×</button>
-                    </div>
-
-                    {/* Step indicator */}
-                    <div className="steps" style={{ marginBottom:'20px' }}>
-                      {[1,2,3].map(s => (
-                        <div key={s} className={`step${postStep >= s ? ' on' : ''}`}>
-                          <div className="step-num">{s}</div>
-                          <div className="step-lbl">{s === 1 ? 'Video' : s === 2 ? 'Details' : 'Itinerary'}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Step 1: Video */}
-                    {postStep === 1 && (
-                      <div>
-                        <div style={{ marginBottom:'16px' }}>
-                          <label style={{ display:'block', fontSize:'13px', fontWeight:600, marginBottom:'6px' }}>Video URL</label>
-                          <input
-                            type="text"
-                            className="fi"
-                            placeholder="YouTube, Facebook, TikTok, or Instagram link"
-                            value={videoUrl}
-                            onChange={(e) => detectVideo(e.target.value)}
-                          />
-                          {videoDetected && <div style={{ fontSize:'12px', color:'var(--g)', marginTop:'6px' }}>{videoDetected}</div>}
-                        </div>
-                        <div style={{ marginBottom:'16px' }}>
-                          <label style={{ display:'block', fontSize:'13px', fontWeight:600, marginBottom:'6px' }}>Or add links</label>
-                          <button
-                            className="nb"
-                            style={{ fontSize:'12px', padding:'8px 12px' }}
-                            onClick={() => setShowAltLinks(!showAltLinks)}
-                          >
-                            {showAltLinks ? '✓ Hide' : '+ Add'} alternative links
-                          </button>
-                          {showAltLinks && (
-                            <div style={{ marginTop:'12px', display:'flex', flexDirection:'column', gap:'8px' }}>
-                              <input type="text" className="fi" placeholder="Facebook URL" value={altLinks.fb} onChange={(e) => setAltLinks({...altLinks, fb: e.target.value})} />
-                              <input type="text" className="fi" placeholder="TikTok URL" value={altLinks.tt} onChange={(e) => setAltLinks({...altLinks, tt: e.target.value})} />
-                              <input type="text" className="fi" placeholder="Instagram URL" value={altLinks.ig} onChange={(e) => setAltLinks({...altLinks, ig: e.target.value})} />
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          className="nb"
-                          style={{ width:'100%', padding:'10px', marginTop:'20px' }}
-                          onClick={() => setPostStep(2)}
-                          disabled={!videoUrl && !altLinks.fb && !altLinks.tt && !altLinks.ig}
-                        >
-                          Next: Details →
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Step 2: Details */}
-                    {postStep === 2 && (
-                      <div>
-                        <div className="fg">
-                          <label>Title</label>
-                          <input type="text" className="fi" placeholder="e.g., Siargao in 7 days" value={postForm.title} onChange={(e) => setPostForm({...postForm, title: e.target.value})} />
-                        </div>
-                        <div className="fg">
-                          <label>Description</label>
-                          <textarea className="fi" placeholder="What's this vlog about?" value={postForm.description} onChange={(e) => setPostForm({...postForm, description: e.target.value})} style={{ minHeight:'80px' }}/>
-                        </div>
-                        <div className="fg">
-                          <label>Locations</label>
-                          <input type="text" className="fi" placeholder="Cities, Countries" value={postForm.cities} onChange={(e) => setPostForm({...postForm, cities: e.target.value})} />
-                        </div>
-                        <div className="fg">
-                          <label>Vibe</label>
-                          <input type="text" className="fi" placeholder="Beach, Mountain, City..." value={postForm.vibe} onChange={(e) => setPostForm({...postForm, vibe: e.target.value})} />
-                        </div>
-                        <div className="fg">
-                          <label>Premium Credits (to unlock itinerary)</label>
-                          <input type="number" className="fi" placeholder="0" value={postForm.credits} onChange={(e) => setPostForm({...postForm, credits: parseInt(e.target.value) || 0})} />
-                        </div>
-                        <div style={{ display:'flex', gap:'10px', marginTop:'20px' }}>
-                          <button className="nb" style={{ flex:1, padding:'10px' }} onClick={() => setPostStep(1)}>← Back</button>
-                          <button className="nb" style={{ flex:1, padding:'10px' }} onClick={() => setPostStep(3)}>Next: Itinerary →</button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Step 3: Itinerary */}
-                    {postStep === 3 && (
-                      <div>
-                        <div style={{ fontSize:'13px', color:'var(--color-text-secondary)', marginBottom:'16px' }}>Add day-by-day itinerary details</div>
-                        {itinDays.map((day, idx) => (
-                          <div key={idx} style={{ marginBottom:'16px', padding:'12px', background:'var(--bg-secondary)', borderRadius:'8px' }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                              <div style={{ fontWeight:600, fontSize:'13px' }}>Day {day.day}</div>
-                              <label style={{ fontSize:'12px', display:'flex', alignItems:'center', gap:'4px' }}>
-                                <input type="checkbox" checked={day.locked} onChange={(e) => {
-                                  const newDays = [...itinDays]
-                                  newDays[idx].locked = e.target.checked
-                                  setItinDays(newDays)
-                                }} />
-                                Premium only
-                              </label>
-                            </div>
-                            <input type="text" className="fi" placeholder="Activity" value={day.activity} onChange={(e) => {
-                              const newDays = [...itinDays]
-                              newDays[idx].activity = e.target.value
-                              setItinDays(newDays)
-                            }} style={{ marginBottom:'8px' }} />
-                            <input type="number" className="fi" placeholder="Cost (₱)" value={day.cost} onChange={(e) => {
-                              const newDays = [...itinDays]
-                              newDays[idx].cost = e.target.value
-                              setItinDays(newDays)
-                            }} style={{ marginBottom:'8px' }} />
-                            <textarea className="fi" placeholder="Description" value={day.highlights || ''} onChange={(e) => {
-                              const newDays = [...itinDays]
-                              newDays[idx].highlights = e.target.value
-                              setItinDays(newDays)
-                            }} style={{ minHeight:'60px' }} />
-                          </div>
-                        ))}
-                        <div style={{ display:'flex', gap:'10px', marginTop:'20px' }}>
-                          <button className="nb" style={{ flex:1, padding:'10px' }} onClick={() => setPostStep(2)}>← Back</button>
-                          <button className="nb" style={{ flex:1, padding:'10px', background:'var(--g)', color:'white' }} onClick={async () => {
-                            setPublishing(true)
-                            try {
-                              const res = await fetch('/api/vlogs', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  title: postForm.title,
-                                  description: postForm.description,
-                                  location: postForm.cities,
-                                  country: postForm.country,
-                                  region: 'Philippines',
-                                  vibe: postForm.vibe,
-                                  credits: postForm.credits,
-                                  youtubeUrl: videoUrl || altLinks.fb || altLinks.tt || altLinks.ig,
-                                  facebookUrl: altLinks.fb,
-                                  tiktokUrl: altLinks.tt,
-                                  instagramUrl: altLinks.ig,
-                                  itinerary: itinDays.map(d => ({
-                                    day: d.day,
-                                    activity: d.activity,
-                                    cost: parseFloat(d.cost) || null,
-                                    locked: d.locked,
-                                    highlights: d.highlights,
-                                  })),
-                                }),
-                              })
-                              if (res.ok) {
-                                const newVlog = await res.json()
-                                setMyVlogs([...myVlogs, newVlog])
-                                setSelectedMyVlogId(newVlog.id)
-                                setDashboardMode('details')
-                                setPostStep(1)
-                                setVideoUrl('')
-                                setPostForm({...defaultPostForm})
-                                setItinDays(defaultItinDays.map(d => ({...d})))
-                              }
-                            } catch (e) {
-                              setPublishError('Failed to publish vlog')
-                            } finally {
-                              setPublishing(false)
-                            }
-                          }} disabled={publishing}>
-                            {publishing ? 'Publishing...' : 'Publish vlog'}
-                          </button>
-                        </div>
-                        {publishError && <div style={{ color:'red', fontSize:'12px', marginTop:'10px' }}>{publishError}</div>}
-                      </div>
-                    )}
-                  </div>
-                )}
-
+            {/* Right Panel - Vlog Details */}
+            {selectedMyVlogId && (
+              <div key={selectedMyVlogId} className="gi-panel">
                 {/* DETAILS MODE */}
                 {dashboardMode === 'details' && selectedMyVlogId && (
                   <>
@@ -2299,8 +2193,8 @@ export default function Home() {
                         <div className="gi-panel-body">
                           {/* Media */}
                           <div className={`gi-panel-media${vlog.coverImage ? '' : ' ' + vlog.thumbnailColor}`}>
-                            {vlog.youtubeUrl ? (
-                              <iframe src={getEmbedUrl(vlog.youtubeUrl) || ''} width="100%" height="100%" allowFullScreen title={vlog.title}/>
+                            {getVlogEmbedUrl(vlog.youtubeUrl) ? (
+                              <iframe src={getVlogEmbedUrl(vlog.youtubeUrl) || ''} width="100%" height="100%" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={vlog.title}/>
                             ) : vlog.coverImage ? (
                               <img src={vlog.coverImage} alt={vlog.title}/>
                             ) : (
@@ -2311,6 +2205,33 @@ export default function Home() {
                                 </svg>
                               </>
                             )}
+                            <button className="gi-panel-zoom" title="Expand">
+                              <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                            </button>
+                          </div>
+
+                          <div className="won" style={{ marginTop:0, marginBottom:'14px' }}>
+                            <span>Watch on:</span>
+                            {vlog.youtubeUrl ? (
+                              <a href={vlog.youtubeUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                                <span className="pdot" style={{ background:'#f00' }}/> YouTube ↗
+                              </a>
+                            ) : null}
+                            {vlog.facebookUrl ? (
+                              <a href={vlog.facebookUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                                <span className="pdot" style={{ background:'#1877f2' }}/> Facebook ↗
+                              </a>
+                            ) : null}
+                            {vlog.tiktokUrl ? (
+                              <a href={vlog.tiktokUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                                <span className="pdot" style={{ background:'#111' }}/> TikTok ↗
+                              </a>
+                            ) : null}
+                            {vlog.instagramUrl ? (
+                              <a href={vlog.instagramUrl} target="_blank" rel="noopener noreferrer" className="pp">
+                                <span className="pdot" style={{ background:'#e1306c' }}/> Instagram ↗
+                              </a>
+                            ) : null}
                           </div>
 
                           {/* Title & Meta */}
@@ -2359,7 +2280,6 @@ export default function Home() {
                               {vlog.itinerary.map(day => (
                                 <div key={day.id} style={{ padding:'10px', background:'var(--bg-secondary)', borderRadius:'6px', marginBottom:'8px', fontSize:'12px' }}>
                                   <div style={{ fontWeight:600, marginBottom:'4px' }}>Day {day.day}: {day.activity}</div>
-                                  {day.description && <div style={{ color:'var(--color-text-secondary)', marginBottom:'4px' }}>{day.description}</div>}
                                   {day.cost && <div>💰 ₱{day.cost}</div>}
                                 </div>
                               ))}

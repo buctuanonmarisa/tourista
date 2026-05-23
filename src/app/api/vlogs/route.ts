@@ -60,18 +60,26 @@ export async function POST(req: NextRequest) {
     }
 
     const stripNonDigit = (s: string) => parseInt(String(s).replace(/[^\d]/g, '') || '0')
+    const country = body.country || 'Philippines'
+    const locationBase = body.city || body.cities || body.location || 'Unknown'
+    const vibe = body.vibe || 'All vlogs'
+    const title = body.title || 'Untitled Vlog'
+    const stableImageLock = (value: string) =>
+      value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+    const fallbackCoverImage =
+      `https://loremflickr.com/1200/800/${encodeURIComponent(locationBase)},${encodeURIComponent(country)},travel/all?lock=${stableImageLock(title)}`
 
     const vlog = await prisma.vlog.create({
       data: {
-        title: body.title || 'Untitled Vlog',
-        location: `${body.city || 'Unknown'}, ${body.country || 'Philippines'}`,
-        country: body.country || 'Philippines',
+        title,
+        location: `${locationBase}, ${country}`,
+        country,
         region: body.region || 'Philippines',
-        vibe: body.vibe || 'All vlogs',
+        vibe,
         cost: body.cost ? stripNonDigit(body.cost) : null,
         currency: 'PHP',
         duration: body.duration ? stripNonDigit(body.duration) : null,
-        credits: body.credits ?? 0,
+        credits: typeof body.credits === 'number' ? body.credits : stripNonDigit(body.credits || '0'),
         description: body.description || null,
         youtubeUrl: body.youtubeUrl || null,
         facebookUrl: body.facebookUrl || null,
@@ -80,7 +88,7 @@ export async function POST(req: NextRequest) {
         thumbnailColor: ['t1', 't2', 't3', 't4', 't5'][Math.floor(Math.random() * 5)],
         status: body.status || 'live',
         authorId: author.id,
-        coverImage: body.coverImage || null,
+        coverImage: body.coverImage || fallbackCoverImage,
         itinerary:
           body.itinerary?.length > 0
             ? {

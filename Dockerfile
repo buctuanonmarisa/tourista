@@ -12,10 +12,14 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# DATABASE_URL should be passed at runtime or build time
+# Generate Prisma client (doesn't require database connection)
 RUN npx prisma generate
-RUN npx prisma db push
-RUN npx tsx prisma/seed.ts
+
+# Skip database operations during build - they will run at runtime
+# RUN npx prisma db push
+# RUN npx tsx prisma/seed.ts
+
+# Build Next.js application
 RUN npm run build
 
 # Stage 3: Run
@@ -32,8 +36,11 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY --from=builder /app/node_modules ./node_modules
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 RUN mkdir -p ./public/uploads
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["./entrypoint.sh"]
