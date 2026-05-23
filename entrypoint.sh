@@ -3,21 +3,33 @@ set -e
 
 echo "Starting Tourista application..."
 
-# Wait for database to be ready (if using external database)
-if [ ! -z "$DATABASE_URL" ]; then
-  echo "Waiting for database to be ready..."
-  # Give database a moment to be ready
-  sleep 2
+if [ -z "$DATABASE_URL" ]; then
+  echo "DATABASE_URL is required because Tourista uses Prisma/PostgreSQL for vlogs and profiles." >&2
+  echo "Pass it when starting Docker, for example: docker run --env-file .env -p 3000:3000 tourista" >&2
+  exit 1
 fi
 
-# Run Prisma migrations
-echo "Running database migrations..."
-npx prisma db push --skip-generate || true
+case "$DATABASE_URL" in
+  \"*\")
+    DATABASE_URL="${DATABASE_URL#\"}"
+    DATABASE_URL="${DATABASE_URL%\"}"
+    export DATABASE_URL
+    ;;
+  \'*\')
+    DATABASE_URL="${DATABASE_URL#\'}"
+    DATABASE_URL="${DATABASE_URL%\'}"
+    export DATABASE_URL
+    ;;
+esac
 
-# Seed database if needed (commented out to preserve existing data)
-# Uncomment the lines below if you want to re-seed the database
-# echo "Seeding database..."
-# npx tsx prisma/seed.ts || true
+case "$DATABASE_URL" in
+  postgresql://*|postgres://*) ;;
+  *)
+    echo "DATABASE_URL must start with postgresql:// or postgres:// for the configured Prisma PostgreSQL datasource." >&2
+    echo "Current value starts with: $(printf '%s' "$DATABASE_URL" | cut -c 1-24)..." >&2
+    exit 1
+    ;;
+esac
 
 # Start the application
 echo "Starting application on port ${PORT:-3000}..."
