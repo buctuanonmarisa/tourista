@@ -37,26 +37,38 @@ jobs:
           script_stop: true
           envs: DATABASE_URL
           script: |
+            set -eu
+
             cd /home/ec2-user/tourista
 
-            if [ -z "$DATABASE_URL" ]; then
-              echo "DATABASE_URL is missing. Add it as a GitHub Actions repository secret before deploying."
+            REMOTE_ENV_FILE="/home/ec2-user/tourista.env"
+
+            if [ -n "${DATABASE_URL:-}" ]; then
+              printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > "$REMOTE_ENV_FILE"
+              chmod 600 "$REMOTE_ENV_FILE"
+            elif [ -f "$REMOTE_ENV_FILE" ]; then
+              echo "Using existing $REMOTE_ENV_FILE on EC2."
+            else
+              echo "DATABASE_URL is missing."
+              echo "Fix one of these before deploying:"
+              echo "1. Add DATABASE_URL as a GitHub Actions repository secret, or"
+              echo "2. Create $REMOTE_ENV_FILE on EC2 with: DATABASE_URL=postgresql://user:password@host:5432/database"
               exit 1
             fi
 
-            # Stop and remove old container
-            docker ps -q --filter publish=80 | xargs -r docker rm -f
-            docker rm -f tourista-app || true
-
             # Build with cache for faster deploys.
             docker build --progress=plain -t ec2-next:latest -f Dockerfile .
+
+            # Stop and remove old container only after the new image builds.
+            docker ps -q --filter publish=80 | xargs -r docker rm -f
+            docker rm -f tourista-app || true
 
             # Run new container
             docker run -d \
               --name tourista-app \
               --restart unless-stopped \
               -p 80:3000 \
-              -e DATABASE_URL="$DATABASE_URL" \
+              --env-file "$REMOTE_ENV_FILE" \
               ec2-next:latest
 
             # Clean up old images
