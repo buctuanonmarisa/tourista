@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+const stableImageLock = (value: string) =>
+  value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+
+const coverPhotoFor = (vlog: { coverImage?: string | null; title: string; location: string; country: string }) =>
+  vlog.coverImage ||
+  `https://loremflickr.com/1200/800/${encodeURIComponent(vlog.location)},${encodeURIComponent(vlog.country)},travel/all?lock=${stableImageLock(vlog.title)}`
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const vlog = await prisma.vlog.findUnique({
     where: { id: params.id },
@@ -25,5 +32,5 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   await prisma.vlog.update({ where: { id: params.id }, data: { views: { increment: 1 } } })
 
-  return NextResponse.json(vlog)
+  return NextResponse.json({ ...vlog, coverImage: coverPhotoFor(vlog) })
 }

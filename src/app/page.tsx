@@ -59,6 +59,12 @@ const defaultItinDays: ItineraryFormDay[] = [
 const VIBES = ['Beach & islands','Mountain hiking','City break','Adventure sports','Food & culture','Solo travel','Family trip','Road trip','Backpacking','Island hopping','Cultural immersion','Wildlife & nature','Photography spots','Nightlife','Wellness & spa','Historical sites']
 const REGIONS = ['All regions','Philippines','Japan','Southeast Asia','Europe','Americas']
 const BUDGETS = ['Any budget','Under ₱10k','₱10k – ₱30k','Above ₱30k','Free vlogs only']
+const stableImageLock = (value: string) =>
+  value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+const fallbackCoverImage = (title: string, location?: string | null, country?: string | null) =>
+  `https://loremflickr.com/1200/800/${encodeURIComponent(location || title)},${encodeURIComponent(country || '')},travel/all?lock=${stableImageLock(title)}`
+const coverForVlog = (v: { title: string; location?: string | null; country?: string | null; coverImage?: string | null }) =>
+  v.coverImage || fallbackCoverImage(v.title, v.location, v.country)
 const CITIES_BY_COUNTRY: Record<string, string[]> = {
   'Philippines': ['Manila', 'Cebu', 'Davao', 'Siargao', 'Palawan', 'Boracay', 'Baguio', 'Iloilo', 'Cagayan de Oro', 'Dumaguete', 'Coron', 'El Nido', 'Vigan', 'Bacolod', 'Zamboanga', 'Tacloban', 'Cabanatuan', 'Quezon City', 'Makati', 'Pasig'],
   'Japan': ['Tokyo', 'Kyoto', 'Osaka', 'Hiroshima', 'Nagoya', 'Yokohama', 'Kobe', 'Sapporo', 'Fukuoka', 'Nara', 'Kanazawa', 'Takayama', 'Kawagoe', 'Nikko', 'Hakone', 'Kamakura', 'Okinawa', 'Nagasaki', 'Matsumoto', 'Sendai'],
@@ -271,6 +277,25 @@ export default function Home() {
       const d: VlogDetail = await r.json()
       setVlog(d); setLikeCount(d.likes); setLiked(false)
     } finally { setVlogLoading(false) }
+  }
+
+  const selectBrowseVlog = async (vlogId: string) => {
+    setPage('browse')
+    setActiveFeedId(vlogId)
+    setVlog(null)
+    setUnlocked(false)
+    setReviewText('')
+    setVlogLoading(true)
+    feedRefs.current[vlogId]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+    try {
+      const r = await fetch(`/api/vlogs/${vlogId}`)
+      const d: VlogDetail = await r.json()
+      setVlog(d)
+      setLikeCount(d.likes)
+      setLiked(false)
+    } finally {
+      setVlogLoading(false)
+    }
   }
 
   /* ══════════════════════════════════════════
@@ -621,6 +646,9 @@ export default function Home() {
   }
   const activeFilters = [vibe !== 'All vlogs' ? vibe : '', region !== 'All regions' ? region : '', budget !== 'Any budget' ? budget : ''].filter(Boolean)
   const embedUrl = getVlogEmbedUrl(vlog?.youtubeUrl)
+  const relatedCreatorVlogs = vlog
+    ? vlogs.filter(v => v.author.id === vlog.author.id && v.id !== vlog.id).slice(0, 3)
+    : []
   const updCr = (v: number) => {
     setPostForm(f => ({ ...f, credits: v }))
   }
@@ -789,32 +817,18 @@ export default function Home() {
                 {vlogs.map(v => {
                   const isActive = activeFeedId === v.id
                   const feedEmbed = isActive ? getFeedEmbedUrl(v) : null
+                  const coverImage = coverForVlog(v)
                   return (
                     <div
                       key={v.id}
                       className={`gi-card${isActive ? ' on' : ''}`}
                       data-vlog-id={v.id}
                       ref={node => { feedRefs.current[v.id] = node }}
-                      onClick={async () => {
-                        setActiveFeedId(v.id)
-                        setVlog(null)
-                        setUnlocked(false)
-                        setReviewText('')
-                        setVlogLoading(true)
-                        try {
-                          const r = await fetch(`/api/vlogs/${v.id}`)
-                          const d: VlogDetail = await r.json()
-                          setVlog(d)
-                          setLikeCount(d.likes)
-                          setLiked(false)
-                        } finally {
-                          setVlogLoading(false)
-                        }
-                      }}
+                      onClick={() => selectBrowseVlog(v.id)}
                     >
                       <div className={`gi-thumb ${v.thumbnailColor}`}>
-                        {v.coverImage ? (
-                          <img src={v.coverImage} alt={v.title}/>
+                        {coverImage ? (
+                          <img src={coverImage} alt={v.title}/>
                         ) : feedEmbed ? (
                           <iframe src={feedEmbed} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={v.title}/>
                         ) : (
@@ -859,18 +873,11 @@ export default function Home() {
                 </div>
                 <div className="gi-panel-body">
                   {/* Media */}
-                  <div className={`gi-panel-media${vlog.coverImage ? '' : ' ' + vlog.thumbnailColor}`}>
+                  <div className={`gi-panel-media${coverForVlog(vlog) ? '' : ' ' + vlog.thumbnailColor}`}>
                     {embedUrl ? (
                       <iframe src={embedUrl} width="100%" height="100%" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={vlog.title}/>
-                    ) : vlog.coverImage ? (
-                      <img src={vlog.coverImage} alt={vlog.title}/>
                     ) : (
-                      <>
-                        <div style={{ position:'absolute', fontSize:'11px', background:'rgba(0,0,0,.6)', color:'#fff', padding:'4px 8px', borderRadius:'4px' }}>Preview</div>
-                        <svg viewBox="0 0 24 24" width="40" height="40" style={{ stroke:'rgba(255,255,255,.6)', fill:'none', strokeWidth:1.5 }}>
-                          <polygon points="5 3 19 12 5 21 5 3"/>
-                        </svg>
-                      </>
+                      <img src={coverForVlog(vlog)} alt={vlog.title}/>
                     )}
                     <button className="gi-panel-zoom" title="Expand">
                       <svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -968,13 +975,13 @@ export default function Home() {
                   )}
 
                   {/* More from creator */}
-                  {myVlogs.length > 1 && (
+                  {relatedCreatorVlogs.length > 0 && (
                     <div className="gi-panel-more">
                       <div className="gi-panel-more-lbl">More from {vlog.author.handle}</div>
                       <div className="gi-panel-more-grid">
-                        {myVlogs.slice(0, 3).map(v => (
-                          <div key={v.id} className="gi-panel-more-card" onClick={() => openD('browse', v.id)}>
-                            <div className={`gi-thumb ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}/>
+                        {relatedCreatorVlogs.map(v => (
+                          <div key={v.id} className="gi-panel-more-card" onClick={() => selectBrowseVlog(v.id)}>
+                            <div className={`gi-thumb ${v.thumbnailColor}`} style={{ backgroundImage: `url('${coverForVlog(v)}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}/>
                           </div>
                         ))}
                       </div>

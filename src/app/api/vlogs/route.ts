@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 
+const stableImageLock = (value: string) =>
+  value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+
+const coverPhotoFor = (vlog: { coverImage?: string | null; title: string; location: string; country: string }) =>
+  vlog.coverImage ||
+  `https://loremflickr.com/1200/800/${encodeURIComponent(vlog.location)},${encodeURIComponent(vlog.country)},travel/all?lock=${stableImageLock(vlog.title)}`
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const search = searchParams.get('search') || ''
@@ -40,7 +47,7 @@ export async function GET(req: NextRequest) {
     orderBy: mine ? [{ createdAt: 'desc' }] : [{ trending: 'desc' }, { views: 'desc' }],
   })
 
-  return NextResponse.json(vlogs)
+  return NextResponse.json(vlogs.map(vlog => ({ ...vlog, coverImage: coverPhotoFor(vlog) })))
 }
 
 export async function POST(req: NextRequest) {
@@ -64,8 +71,6 @@ export async function POST(req: NextRequest) {
     const locationBase = body.city || body.cities || body.location || 'Unknown'
     const vibe = body.vibe || 'All vlogs'
     const title = body.title || 'Untitled Vlog'
-    const stableImageLock = (value: string) =>
-      value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
     const fallbackCoverImage =
       `https://loremflickr.com/1200/800/${encodeURIComponent(locationBase)},${encodeURIComponent(country)},travel/all?lock=${stableImageLock(title)}`
 
