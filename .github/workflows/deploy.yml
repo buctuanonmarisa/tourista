@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -21,14 +22,17 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "."
           target: "/home/ec2-user/tourista"
+          rm: true
 
       - name: Build and restart Docker container
         uses: appleboy/ssh-action@v1.0.3
+        timeout-minutes: 60
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 30m
+          command_timeout: 60m
+          script_stop: true
           script: |
             cd /home/ec2-user/tourista
 
@@ -36,8 +40,8 @@ jobs:
             docker ps -q --filter publish=80 | xargs -r docker rm -f
             docker rm -f tourista-app || true
 
-            # Build with cache for faster builds (remove --no-cache)
-            docker build -t ec2-next:latest -f Dockerfile .
+            # Build with cache for faster deploys.
+            docker build --progress=plain -t ec2-next:latest -f Dockerfile .
 
             # Run new container
             docker run -d \

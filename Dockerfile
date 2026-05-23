@@ -8,6 +8,7 @@ RUN npm ci --ignore-scripts
 FROM node:20-alpine AS builder
 RUN apk add --no-cache openssl
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -29,6 +30,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV NEXT_TELEMETRY_DISABLED=1
 # DATABASE_URL should be passed at runtime via environment variables
 
 COPY --from=builder /app/.next/standalone ./
