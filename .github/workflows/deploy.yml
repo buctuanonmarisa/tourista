@@ -56,14 +56,25 @@ jobs:
               exit 1
             fi
 
-            # Build with cache for faster deploys.
-            docker build --progress=plain -t ec2-next:latest -f Dockerfile .
+            # Enable BuildKit for better caching and performance
+            export DOCKER_BUILDKIT=1
+
+            # Build with BuildKit cache and optimizations
+            echo "Building Docker image with BuildKit..."
+            docker build \
+              --progress=plain \
+              --build-arg BUILDKIT_INLINE_CACHE=1 \
+              -t ec2-next:latest \
+              -f Dockerfile \
+              .
 
             # Stop and remove old container only after the new image builds.
+            echo "Stopping old container..."
             docker ps -q --filter publish=80 | xargs -r docker rm -f
             docker rm -f tourista-app || true
 
             # Run new container
+            echo "Starting new container..."
             docker run -d \
               --name tourista-app \
               --restart unless-stopped \
@@ -71,5 +82,10 @@ jobs:
               --env-file "$REMOTE_ENV_FILE" \
               ec2-next:latest
 
-            # Clean up old images
+            # Clean up old images (keep last 2 for rollback)
+            echo "Cleaning up old images..."
+            docker images | grep ec2-next | tail -n +3 | awk '{print $3}' | xargs -r docker rmi -f || true
             docker image prune -f
+
+            echo "Deployment complete!"
+            docker ps --filter name=tourista-app

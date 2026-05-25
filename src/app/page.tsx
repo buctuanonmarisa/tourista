@@ -187,6 +187,8 @@ export default function Home() {
   const [publishError, setPublishError] = useState('')
   const [coverUploading, setCoverUploading] = useState(false)
   const [dayUploading, setDayUploading] = useState<Record<number, boolean>>({})
+  const [aiAutoFilling, setAiAutoFilling] = useState(false)
+  const [aiAutoFillError, setAiAutoFillError] = useState('')
   const [postView, setPostView] = useState<'form' | 'drafts'>('form')
   const [vibeInput, setVibeInput] = useState('')
   const [vibeFocused, setVibeFocused] = useState(false)
@@ -384,6 +386,75 @@ export default function Home() {
     else if (url.includes('tiktok')) setVideoDetected('TikTok link detected ✓')
     else if (url.includes('instagram')) setVideoDetected('Instagram link detected ✓')
     else setVideoDetected('')
+  }
+
+  const handleAIAutoFill = async () => {
+    if (!videoUrl.trim()) {
+      setAiAutoFillError('Please enter a YouTube URL first')
+      return
+    }
+
+    if (!videoUrl.includes('youtube') && !videoUrl.includes('youtu.be')) {
+      setAiAutoFillError('AI auto-fill currently only supports YouTube videos')
+      return
+    }
+
+    setAiAutoFilling(true)
+    setAiAutoFillError('')
+    setPublishError('')
+
+    try {
+      const response = await fetch('/api/vlogs/auto-fill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ youtubeUrl: videoUrl })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to auto-fill')
+      }
+
+      const result = await response.json()
+      const data = result.data
+
+      // Populate form fields
+      setPostForm(f => ({
+        ...f,
+        title: data.title || f.title,
+        description: data.description || f.description,
+        country: data.country || f.country,
+        cities: data.cities || f.cities,
+        vibe: data.vibe || f.vibe,
+        coverImage: data.coverImage || f.coverImage,
+      }))
+
+      // Populate itinerary if provided
+      if (data.itinerary && data.itinerary.length > 0) {
+        const newItinDays = data.itinerary.map((day: any, idx: number) => ({
+          day: idx + 1,
+          activity: day.activity || '',
+          cost: day.cost || '',
+          locked: idx >= 2, // Lock day 3+
+          highlights: day.highlights || '',
+          tips: day.tips || '',
+          expanded: false
+        }))
+        // Keep existing days if more than AI-generated
+        const finalDays = newItinDays.length >= itinDays.length
+          ? newItinDays
+          : [...newItinDays, ...itinDays.slice(newItinDays.length)]
+        setItinDays(finalDays)
+      }
+
+      // Show success message
+      setVideoDetected('✨ AI auto-filled! Review and adjust as needed.')
+
+    } catch (error: any) {
+      setAiAutoFillError(error.message || 'Failed to auto-fill. Please try again.')
+    } finally {
+      setAiAutoFilling(false)
+    }
   }
 
   /* ══════════════════════════════════════════
@@ -1725,11 +1796,38 @@ export default function Home() {
                     <input className="vli" type="text" placeholder="e.g. https://youtube.com/watch?v=..."
                       value={videoUrl} onChange={e => detectVideo(e.target.value)}/>
                     <button className="vlbb">Add</button>
+                    <button
+                      className="vlbb"
+                      style={{
+                        background: aiAutoFilling ? 'var(--g1)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        marginLeft: '8px',
+                        cursor: aiAutoFilling || !videoUrl.trim() ? 'not-allowed' : 'pointer',
+                        opacity: aiAutoFilling || !videoUrl.trim() ? 0.6 : 1
+                      }}
+                      onClick={handleAIAutoFill}
+                      disabled={aiAutoFilling || !videoUrl.trim()}
+                    >
+                      {aiAutoFilling ? '⏳ Generating...' : '✨ Auto-fill with AI'}
+                    </button>
                   </div>
                   {videoDetected && (
                     <div className="detp">
                       <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                       {videoDetected}
+                    </div>
+                  )}
+                  {aiAutoFillError && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '10px 14px',
+                      background: '#fee',
+                      border: '1px solid #fcc',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      color: '#c33',
+                      lineHeight: '1.5'
+                    }}>
+                      {aiAutoFillError}
                     </div>
                   )}
                   <div className="aml" onClick={() => setShowAltLinks(s => !s)}>

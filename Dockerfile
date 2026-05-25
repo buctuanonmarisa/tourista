@@ -1,8 +1,12 @@
 # Stage 1: Install deps
 FROM node:20-alpine AS deps
 WORKDIR /app
+
+# Copy package files
 COPY package.json package-lock.json* ./
-RUN npm ci --ignore-scripts
+
+# Install dependencies with optimizations
+RUN npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
@@ -10,8 +14,19 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+
+# Copy only necessary files for build (order matters for caching)
+COPY package.json package-lock.json* ./
+COPY tsconfig.json ./
+COPY next.config.js ./
+COPY postcss.config.js ./
+COPY tailwind.config.js ./
+COPY next-env.d.ts ./
+COPY prisma ./prisma
+COPY public ./public
+COPY src ./src
 
 # Generate Prisma client (doesn't require database connection)
 RUN npx prisma generate
