@@ -14,6 +14,7 @@ interface ItineraryDay {
   id: string; day: number; activity: string; cost?: number | null
   locked: boolean; highlights?: string | null; foodTips?: string | null
   gettingThere?: string | null; tips?: string | null
+  clipDescription?: string | null
   mediaUrl?: string | null; mediaType?: 'image' | 'video' | string | null
   media?: MediaItem[] | null
 }
@@ -46,6 +47,7 @@ interface ItineraryFormDay {
   day: number; activity: string; cost: string; locked: boolean
   mediaUrl?: string; mediaType?: 'image' | 'video' | null
   clipUrl?: string
+  clipUrls?: string[]
   media?: MediaItem[]
   mediaCarouselIndex?: number
   highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
@@ -55,7 +57,8 @@ interface SavedDraft {
   id: string; savedAt: number; title: string
   data: { videoUrl: string; altLinks: { fb: string; tt: string; ig: string }; postForm: typeof defaultPostForm; itinDays: ItineraryFormDay[]; postStep: number }
 }
-const defaultPostForm = { title: '', description: '', country: DEFAULT_COUNTRY, cities: '', vibe: '', credits: 2, coverImage: '' }
+const defaultPostForm = { title: '', description: '', country: DEFAULT_COUNTRY, cities: '', vibe: '', credits: 2, coverImage: '', cost: '', duration: '' }
+const CREDIT_PESO_RATE = 20
 const defaultItinDays: ItineraryFormDay[] = [
   { day: 1, activity: '', cost: '', locked: false, expanded: false },
   { day: 2, activity: '', cost: '', locked: false, expanded: false },
@@ -152,6 +155,7 @@ export default function Home() {
   const [selectedVibes, setSelectedVibes] = useState<string[]>([])
   const [selectedCountries, setSelectedCountries] = useState<string[]>([])
   const [budget, setBudget] = useState('')
+  const [accessFilter, setAccessFilter] = useState<'all' | 'unlock' | 'free'>('all')
   const [activeFilterTab, setActiveFilterTab] = useState<'vibe' | 'country' | 'budget'>('vibe')
   const [searchFallback, setSearchFallback] = useState(false)
   const [countryOptions, setCountryOptions] = useState(FALLBACK_COUNTRIES)
@@ -220,6 +224,7 @@ export default function Home() {
   const [selectedMyVlogId, setSelectedMyVlogId] = useState<string | null>(null)
   const [dashboardMode, setDashboardMode] = useState<'list' | 'details' | 'post'>('list')
   const [editingVlogId, setEditingVlogId] = useState<string | null>(null)
+  const [autoplayVlogId, setAutoplayVlogId] = useState<string | null>(null)
   const [tourMeOpen, setTourMeOpen] = useState(false)
 
   /* ─── Refs for file inputs ─── */
@@ -235,13 +240,14 @@ export default function Home() {
     if (selectedVibes.length) p.set('vibe', selectedVibes.join(','))
     if (selectedCountries.length) p.set('country', selectedCountries.join(','))
     if (budget) p.set('budget', budget)
+    if (accessFilter !== 'all') p.set('access', accessFilter)
     try {
       const r = await fetch(`/api/vlogs?${p}`)
       const d = await r.json()
       if (Array.isArray(d)) setVlogs(d)
       setSearchFallback(Boolean(search) && r.headers.get('x-search-fallback') === 'true')
     } catch { /* ignore */ }
-  }, [search, selectedVibes, selectedCountries, budget])
+  }, [search, selectedVibes, selectedCountries, budget, accessFilter])
 
   const fetchMyVlogs = useCallback(async () => {
     try {
@@ -363,6 +369,8 @@ export default function Home() {
   const getEmbedUrl = (url: string) => {
     const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\s?]+)/)
     if (yt) return `https://www.youtube.com/embed/${yt[1]}?controls=1&rel=0`
+    const ytShort = url.match(/youtube\.com\/shorts\/([^&\s?]+)/)
+    if (ytShort) return `https://www.youtube.com/embed/${ytShort[1]}?controls=1&rel=0`
     const ytSearch = url.match(/youtube\.com\/results\?search_query=([^&]+)/)
     if (ytSearch) return `https://www.youtube.com/embed?listType=search&list=${ytSearch[1]}&controls=1&rel=0`
     return null
@@ -376,6 +384,14 @@ export default function Home() {
     if (!url) return null
     const base = getEmbedUrl(url)
     return base ? withAutoplay(base) : null
+  }
+  const directVideoUrl = (url: string) =>
+    url.startsWith('blob:') ||
+    url.startsWith('/api/uploads/') ||
+    /\.(mp4|webm|ogg)(\?|#|$)/i.test(url)
+  const clipPreviewUrl = (url: string) => {
+    const embed = getEmbedUrl(url)
+    return embed ? withAutoplay(embed) : null
   }
 
   const detectVideo = (url: string) => {
@@ -427,24 +443,36 @@ export default function Home() {
         cities: data.cities || f.cities,
         vibe: data.vibe || f.vibe,
         coverImage: data.coverImage || f.coverImage,
+        cost: data.cost || data.estimatedCost || f.cost,
+        duration: data.duration ? String(data.duration) : f.duration,
       }))
 
       // Populate itinerary if provided
       if (data.itinerary && data.itinerary.length > 0) {
+        const generatedTotalCost = data.itinerary.reduce((sum: number, day: any) => {
+          const cleaned = String(day.cost || '').replace(/[^\d]/g, '')
+          return sum + (parseInt(cleaned) || 0)
+        }, 0)
         const newItinDays = data.itinerary.map((day: any, idx: number) => ({
-          day: idx + 1,
+          day: day.day || idx + 1,
           activity: day.activity || '',
           cost: day.cost || '',
-          locked: idx >= 2, // Lock day 3+
+          locked: idx >= 2, // Keep the first two AI-generated days open as the free preview.
           highlights: day.highlights || '',
+          foodTips: day.foodTips || '',
+          gettingThere: day.gettingThere || '',
           tips: day.tips || '',
-          expanded: false
+          expanded: true
         }))
         // Keep existing days if more than AI-generated
         const finalDays = newItinDays.length >= itinDays.length
           ? newItinDays
           : [...newItinDays, ...itinDays.slice(newItinDays.length)]
         setItinDays(finalDays)
+        setPostForm(f => ({
+          ...f,
+          credits: generatedTotalCost > 0 ? Math.ceil(generatedTotalCost / CREDIT_PESO_RATE) : f.credits,
+        }))
       }
 
       // Show success message
@@ -499,7 +527,7 @@ export default function Home() {
     }
     if (postStep === 2) {
       const hasDay = itinDays.some(d =>
-        d.activity.trim() || d.clipUrl?.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
+        d.activity.trim() || clipUrlsForDay(d).some(url => url.trim()) || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
       )
       if (!hasDay) { setPublishError('Please fill in at least one itinerary day.'); return }
       setPostForm(f => ({ ...f, credits: calculateCreditsFromCost() }))
@@ -510,7 +538,7 @@ export default function Home() {
         return
       }
       // Check that at least one day is unlocked (free)
-      const hasFreeDays = itinDays.some(d => !d.locked && (d.activity.trim() || d.clipUrl?.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()))
+      const hasFreeDays = itinDays.some(d => !d.locked && (d.activity.trim() || clipUrlsForDay(d).some(url => url.trim()) || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()))
       if (!hasFreeDays) {
         setPublishError('Please unlock at least one itinerary day so tourists can preview your content.')
         return
@@ -535,6 +563,37 @@ export default function Home() {
   const updDay = (i: number, k: keyof ItineraryFormDay, v: string | boolean | null) =>
     setItinDays(d => d.map((x, j) => j === i ? { ...x, [k]: v } : x))
 
+  const clipUrlsForDay = (day: Pick<ItineraryFormDay, 'clipUrl' | 'clipUrls'>) => {
+    const urls = day.clipUrls?.length ? day.clipUrls : (day.clipUrl ? [day.clipUrl] : [''])
+    return urls.length ? urls : ['']
+  }
+
+  const updateDayClipUrl = (dayIndex: number, clipIndex: number, value: string) => {
+    setItinDays(days => days.map((day, index) => {
+      if (index !== dayIndex) return day
+      const clipUrls = clipUrlsForDay(day)
+      clipUrls[clipIndex] = value
+      return { ...day, clipUrl: clipUrls[0] || '', clipUrls }
+    }))
+  }
+
+  const addDayClipUrl = (dayIndex: number) => {
+    setItinDays(days => days.map((day, index) => {
+      if (index !== dayIndex) return day
+      const clipUrls = clipUrlsForDay(day)
+      return { ...day, clipUrls: [...clipUrls, ''] }
+    }))
+  }
+
+  const removeDayClipUrl = (dayIndex: number, clipIndex: number) => {
+    setItinDays(days => days.map((day, index) => {
+      if (index !== dayIndex) return day
+      const next = clipUrlsForDay(day).filter((_, itemIndex) => itemIndex !== clipIndex)
+      const clipUrls = next.length ? next : ['']
+      return { ...day, clipUrl: clipUrls[0] || '', clipUrls }
+    }))
+  }
+
   const isShortClipLink = (url: string) => {
     const value = url.trim().toLowerCase()
     if (!value) return true
@@ -550,8 +609,10 @@ export default function Home() {
   }
 
   const validateShortClipLink = (i: number) => {
-    const clipUrl = itinDays[i]?.clipUrl?.trim() || ''
-    if (!clipUrl || isShortClipLink(clipUrl)) return true
+    const invalidClipUrl = clipUrlsForDay(itinDays[i] || { clipUrl: '', clipUrls: [] })
+      .map(url => url.trim())
+      .find(url => url && !isShortClipLink(url))
+    if (!invalidClipUrl) return true
     window.alert('Please use a short-form clip link that is 1 minute or less, such as YouTube Shorts, TikTok, Instagram Reels, or Facebook Reels. Longer clips will not be processed.')
     return false
   }
@@ -648,15 +709,24 @@ export default function Home() {
   }
 
   const mediaForDay = (day: ItineraryDay | ItineraryFormDay): MediaItem[] => {
+    let storedMedia: MediaItem[] = []
+    if ('clipDescription' in day && day.clipDescription) {
+      try {
+        const parsed = JSON.parse(day.clipDescription)
+        if (Array.isArray(parsed?.media)) {
+          storedMedia = parsed.media.filter((item: MediaItem) => Boolean(item.url))
+        }
+      } catch { /* ignore legacy free text */ }
+    }
     const formMedia = 'media' in day && Array.isArray(day.media)
       ? day.media.filter(item => Boolean(item.url))
       : []
-    const clipMedia = 'clipUrl' in day && day.clipUrl
-      ? [{ url: day.clipUrl, type: 'video' as const }]
-      : []
-    if (formMedia.length || clipMedia.length) {
+    const clipMedia = 'clipUrls' in day
+      ? clipUrlsForDay(day).filter(Boolean).map(url => ({ url, type: 'video' as const }))
+      : ('clipUrl' in day && day.clipUrl ? [{ url: day.clipUrl, type: 'video' as const }] : [])
+    if (storedMedia.length || formMedia.length || clipMedia.length) {
       const seen = new Set<string>()
-      return [...clipMedia, ...formMedia].filter(item => {
+      return [...clipMedia, ...storedMedia, ...formMedia].filter(item => {
         if (seen.has(item.url)) return false
         seen.add(item.url)
         return true
@@ -671,6 +741,23 @@ export default function Home() {
   const openMediaModal = (title: string, items: MediaItem[], index = 0) => {
     if (!items.length) return
     setMediaModal({ title, items, index: Math.min(Math.max(index, 0), items.length - 1) })
+  }
+
+  const renderMediaPreview = (item: MediaItem, title: string) => {
+    if (item.type !== 'video') return <img src={item.url} alt={title} />
+    const previewUrl = clipPreviewUrl(item.url)
+    if (previewUrl) {
+      return <iframe src={previewUrl} title={title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+    }
+    if (directVideoUrl(item.url)) {
+      return <video src={item.url} muted autoPlay loop playsInline />
+    }
+    return (
+      <div className="clip-link-preview">
+        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Preview link</span>
+      </div>
+    )
   }
 
   const shiftMediaModal = (delta: number) => {
@@ -691,6 +778,16 @@ export default function Home() {
     } : day))
   }
 
+  const removeDayMediaItem = (dayIndex: number, item: MediaItem, mediaIndex: number) => {
+    const clipUrls = clipUrlsForDay(itinDays[dayIndex] || { clipUrl: '', clipUrls: [] })
+    const clipIndex = clipUrls.findIndex(url => url === item.url)
+    if (clipIndex >= 0) {
+      removeDayClipUrl(dayIndex, clipIndex)
+      return
+    }
+    removeDayMedia(dayIndex, mediaIndex - clipUrls.filter(Boolean).length)
+  }
+
   const beginEditVlog = (detail: VlogDetail) => {
     const stripCountry = (location: string) => {
       const suffix = `, ${detail.country}`
@@ -708,6 +805,8 @@ export default function Home() {
       vibe: detail.vibe || '',
       credits: detail.credits || 0,
       coverImage: detail.coverImage || '',
+      cost: detail.cost ? String(detail.cost) : '',
+      duration: detail.duration ? String(detail.duration) : '',
     })
     setVideoUrl(detail.youtubeUrl || detail.facebookUrl || detail.tiktokUrl || detail.instagramUrl || '')
     setVideoDetected('')
@@ -725,6 +824,7 @@ export default function Home() {
       mediaUrl: day.mediaUrl || undefined,
       mediaType: day.mediaType === 'video' ? 'video' : day.mediaUrl ? 'image' : null,
       clipUrl: day.mediaType === 'video' ? day.mediaUrl || '' : '',
+      clipUrls: mediaForDay(day).filter(item => item.type === 'video').map(item => item.url),
       highlights: day.highlights || '',
       foodTips: day.foodTips || '',
       gettingThere: day.gettingThere || '',
@@ -748,9 +848,9 @@ export default function Home() {
       const isTt = videoUrl.includes('tiktok')
       const isIg = videoUrl.includes('instagram')
       const filledDays = itinDays.filter(d =>
-        d.activity.trim() || d.clipUrl?.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
+        d.activity.trim() || clipUrlsForDay(d).some(url => url.trim()) || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
       )
-      const invalidClip = filledDays.find(day => day.clipUrl?.trim() && !isShortClipLink(day.clipUrl))
+      const invalidClip = filledDays.find(day => clipUrlsForDay(day).some(url => url.trim() && !isShortClipLink(url)))
       if (invalidClip) {
         setPublishError(`Day ${invalidClip.day} has a clip link that is not recognized as a short-form video. Use a YouTube Shorts, TikTok, Instagram Reels, or Facebook Reels link that is 1 minute or less.`)
         return
@@ -772,18 +872,30 @@ export default function Home() {
           facebookUrl: isFb ? videoUrl : (altLinks.fb.includes('facebook') || altLinks.fb.includes('fb.com') ? altLinks.fb : null),
           tiktokUrl: isTt ? videoUrl : (altLinks.tt || null),
           instagramUrl: isIg ? videoUrl : (altLinks.ig || null),
-          itinerary: filledDays.map(day => ({
-            ...day,
-            mediaUrl: day.clipUrl?.trim() || day.media?.find(m => !m.url.startsWith('blob:'))?.url || day.mediaUrl || null,
-            mediaType: day.clipUrl?.trim() ? 'video' : (day.media?.find(m => !m.url.startsWith('blob:'))?.type || day.mediaType || null),
-            media: day.media?.filter(m => !m.url.startsWith('blob:')) || [],
-          })),
+          itinerary: filledDays.map(day => {
+            const clipUrls = clipUrlsForDay(day).map(url => url.trim()).filter(Boolean)
+            const uploadedMedia = day.media?.filter(m => !m.url.startsWith('blob:')) || []
+            const media = [
+              ...clipUrls.map(url => ({ url, type: 'video' as const })),
+              ...uploadedMedia,
+            ]
+            const firstMedia = media[0]
+            return {
+              ...day,
+              clipUrl: clipUrls[0] || '',
+              clipUrls,
+              mediaUrl: firstMedia?.url || day.mediaUrl || null,
+              mediaType: firstMedia?.type || day.mediaType || null,
+              media,
+            }
+          }),
         }),
       })
       if (!r.ok) { const e = await r.json().catch(() => ({})); setPublishError(e.error || `Failed to ${editingVlogId ? 'save changes' : 'publish'}. Please try again.`); return }
       const created: VlogCard = await r.json()
       setSelectedMyVlogId(created.id)
       setDashboardMode('details')
+      setAutoplayVlogId(created.id)
       setVlogLoading(true)
       setMyVlogs(current => [created, ...current.filter(v => v.id !== created.id)])
       fetchVlogs()
@@ -927,13 +1039,14 @@ export default function Home() {
     ...selectedVibes,
     ...selectedCountries,
     budget,
+    accessFilter === 'free' ? 'Free only' : accessFilter === 'unlock' ? 'Unlock only' : '',
   ].filter(Boolean)
   const embedUrl = getVlogEmbedUrl(vlog?.youtubeUrl)
   const relatedCreatorVlogs = vlog
     ? vlogs.filter(v => v.author.id === vlog.author.id && v.id !== vlog.id).slice(0, 3)
     : []
   const countryFilters = countryOptions.filter(c => c !== 'All countries' && c !== 'All regions')
-  const budgetFilters = budgetOptions.filter(b => b !== 'Any budget')
+  const budgetFilters = budgetOptions.filter(b => b !== 'Any budget' && b !== 'Free vlogs only')
   const updCr = (v: number) => {
     setPostForm(f => ({ ...f, credits: v }))
   }
@@ -947,8 +1060,8 @@ export default function Home() {
       return sum + num
     }, 0)
 
-    // 1 credit per ₱75
-    return totalDayCost > 0 ? Math.ceil(totalDayCost / 75) : 0
+    // 1 credit per PHP 20.
+    return totalDayCost > 0 ? Math.ceil(totalDayCost / CREDIT_PESO_RATE) : 0
   }
 
   /* ══════════════════════════════════════════
@@ -1000,7 +1113,7 @@ export default function Home() {
               }}
             />
             {search && (
-              <button className="tn-search-clear" onClick={() => setSearch('')} aria-label="Clear search">
+              <button type="button" className="tn-search-clear" onClick={() => { setSearch(''); setSearchFallback(false) }} aria-label="Clear search">
                 <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             )}
@@ -1049,6 +1162,22 @@ export default function Home() {
       {page === 'browse' && (
         <div className="filterbar">
           <div className="filterbar-inner">
+            <div className="access-filter" aria-label="Unlock filter">
+              {[
+                { value: 'all', label: 'All vlogs' },
+                { value: 'unlock', label: 'Unlock only' },
+                { value: 'free', label: 'Free only' },
+              ].map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`access-filter-btn${accessFilter === option.value ? ' on' : ''}`}
+                  onClick={() => setAccessFilter(option.value as typeof accessFilter)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             <div className="fb-tabs">
               <button className={`fb-tab${activeFilterTab === 'vibe' ? ' on' : ''}`} onClick={() => setActiveFilterTab('vibe')}>
                 Vibe {selectedVibes.length > 0 && <span className="fb-tab-count">{selectedVibes.length}</span>}
@@ -1244,7 +1373,7 @@ export default function Home() {
                   {vlog.credits > 0 && !unlocked && (
                     <div style={{ padding:'12px', background:'var(--yl)', borderRadius:'10px', marginBottom:'14px' }}>
                       <div style={{ fontSize:'13px', fontWeight:600, color:'var(--y1)', marginBottom:'6px' }}>Unlock itinerary</div>
-                      <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · ₱{vlog.credits * 10}</div>
+                      <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · ₱{vlog.credits * CREDIT_PESO_RATE}</div>
                       <button className="gi-panel-btn gi-panel-btn-primary" onClick={doUnlock} style={{ background:'var(--y)', color:'var(--y1)', fontSize:'12px', padding:'8px' }}>
                         Unlock
                       </button>
@@ -1283,7 +1412,7 @@ export default function Home() {
                                         if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)
                                       }}
                                     >
-                                      {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={`Day ${day.day} media ${mediaIndex + 1}`} />}
+                                      {renderMediaPreview(item, `Day ${day.day} media ${mediaIndex + 1}`)}
                                       <span className="day-media-card-overlay">View</span>
                                     </div>
                                   ))}
@@ -1449,7 +1578,7 @@ export default function Home() {
                           Get all locked days with costs, descriptions, booking contacts &amp; exclusive clips from {vlog.author.handle}.
                         </div>
                         <button className="ulc" onClick={doUnlock}>
-                          Unlock for {vlog.credits} {vlog.credits === 1 ? 'credit' : 'credits'} — ₱{vlog.credits * 10}
+                          Unlock for {vlog.credits} {vlog.credits === 1 ? 'credit' : 'credits'} — ₱{vlog.credits * CREDIT_PESO_RATE}
                         </button>
                       </>
                     )}
@@ -1488,7 +1617,7 @@ export default function Home() {
                                       if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)
                                     }}
                                   >
-                                    {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={`Day ${day.day} media ${mediaIndex + 1}`} />}
+                                    {renderMediaPreview(item, `Day ${day.day} media ${mediaIndex + 1}`)}
                                     <span className="day-media-card-overlay">View</span>
                                   </div>
                                 ))}
@@ -2053,15 +2182,27 @@ export default function Home() {
                         {/* Media carousel gallery */}
                         <div>
                           <div className="short-clip-note">Each itinerary video clip should be 1 minute or less. Longer clips will not be processed.</div>
-                          <div className="short-clip-link">
-                            <input
-                              className="fi"
-                              type="url"
-                              placeholder="Short clip link, e.g. https://www.youtube.com/shorts/xwxVLYISc5g"
-                              value={d.clipUrl || ''}
-                              onChange={e => updDay(i, 'clipUrl', e.target.value)}
-                              onBlur={() => validateShortClipLink(i)}
-                            />
+                          <div className="short-clip-links">
+                            {clipUrlsForDay(d).map((clipUrl, clipIndex) => (
+                              <div key={clipIndex} className="short-clip-link">
+                                <input
+                                  className="fi"
+                                  type="url"
+                                  placeholder="Short clip link, e.g. https://www.youtube.com/shorts/xwxVLYISc5g"
+                                  value={clipUrl}
+                                  onChange={e => updateDayClipUrl(i, clipIndex, e.target.value)}
+                                  onBlur={() => validateShortClipLink(i)}
+                                />
+                                {clipUrlsForDay(d).length > 1 && (
+                                  <button type="button" className="clip-link-remove" aria-label="Remove clip link" onClick={() => removeDayClipUrl(i, clipIndex)}>
+                                    x
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            <button type="button" className="clip-link-add" onClick={() => addDayClipUrl(i)}>
+                              + Add another short clip link
+                            </button>
                           </div>
                           <span className="day-sub-lbl">📸 Photos & videos for this day</span>
                           {(() => {
@@ -2081,11 +2222,7 @@ export default function Home() {
                                         if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${d.day} photos & videos`, dayMedia, mediaIndex)
                                       }}
                                     >
-                                      {item.type === 'video' ? (
-                                        <video src={item.url} muted playsInline />
-                                      ) : (
-                                        <img src={item.url} alt={`Day ${d.day} media ${mediaIndex + 1}`} />
-                                      )}
+                                      {renderMediaPreview(item, `Day ${d.day} media ${mediaIndex + 1}`)}
                                       <span className="day-media-card-overlay">View</span>
                                       <button
                                         type="button"
@@ -2093,11 +2230,7 @@ export default function Home() {
                                         aria-label="Remove media"
                                         onClick={event => {
                                           event.stopPropagation()
-                                          if (item.url === d.clipUrl) {
-                                            updDay(i, 'clipUrl', '')
-                                          } else {
-                                            removeDayMedia(i, mediaIndex - (d.clipUrl ? 1 : 0))
-                                          }
+                                          removeDayMediaItem(i, item, mediaIndex)
                                         }}
                                       >
                                         x
@@ -2301,7 +2434,7 @@ export default function Home() {
                       <strong style={{ color: 'var(--color-text-primary)' }}>Recommended value:</strong>
                       <div style={{ marginTop: '8px', fontSize: '12px', lineHeight: '1.6' }}>
                         Total itinerary cost: <strong>₱{totalDayCost.toLocaleString()}</strong><br/>
-                        ÷ ₱75 per credit = <strong>{calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}</strong>
+                        ÷ ₱{CREDIT_PESO_RATE} per credit = <strong>{calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}</strong>
                       </div>
                     </div>
                     <div className="credit-ruler">
@@ -2336,7 +2469,7 @@ export default function Home() {
                     <div className="cri">
                       {selectedCredits === 0
                         ? 'Free vlog — great for building your audience.'
-                        : <>At {selectedCredits} credit{selectedCredits > 1 ? 's' : ''} at PHP {selectedCredits * 10} per tourist, 80% to you = <strong>PHP {selectedCredits * 8}</strong>. Est. 50 unlocks/month = <strong>PHP {(selectedCredits * 8 * 50).toLocaleString()} passive income</strong></>
+                        : <>At {selectedCredits} credit{selectedCredits > 1 ? 's' : ''} at PHP {selectedCredits * CREDIT_PESO_RATE} per tourist, 80% to you = <strong>PHP {selectedCredits * CREDIT_PESO_RATE * 0.8}</strong>. Est. 50 unlocks/month = <strong>PHP {(selectedCredits * CREDIT_PESO_RATE * 0.8 * 50).toLocaleString()} passive income</strong></>
                       }
                     </div>
                   </div>
@@ -2667,7 +2800,7 @@ export default function Home() {
                           {/* Media */}
                           <div className={`gi-panel-media${vlog.coverImage ? '' : ' ' + vlog.thumbnailColor}`}>
                             {getVlogEmbedUrl(vlog.youtubeUrl) ? (
-                              <iframe src={getVlogEmbedUrl(vlog.youtubeUrl) || ''} width="100%" height="100%" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={vlog.title}/>
+                              <iframe key={`${vlog.id}-${autoplayVlogId === vlog.id ? 'autoplay' : 'player'}`} src={getVlogEmbedUrl(vlog.youtubeUrl) || ''} width="100%" height="100%" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={vlog.title}/>
                             ) : vlog.coverImage ? (
                               <img src={vlog.coverImage} alt={vlog.title}/>
                             ) : (
@@ -2739,7 +2872,7 @@ export default function Home() {
                           {vlog.credits > 0 && !unlocked && (
                             <div style={{ padding:'12px', background:'var(--yl)', borderRadius:'10px', marginBottom:'14px' }}>
                               <div style={{ fontSize:'13px', fontWeight:600, color:'var(--y1)', marginBottom:'6px' }}>Unlock itinerary</div>
-                              <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · ₱{vlog.credits * 10}</div>
+                              <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · ₱{vlog.credits * CREDIT_PESO_RATE}</div>
                               <button className="gi-panel-btn gi-panel-btn-primary" onClick={doUnlock} style={{ background:'var(--y)', color:'var(--y1)', fontSize:'12px', padding:'8px' }}>
                                 Unlock
                               </button>
@@ -2778,7 +2911,7 @@ export default function Home() {
                                                 if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)
                                               }}
                                             >
-                                              {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={`Day ${day.day} media ${mediaIndex + 1}`} />}
+                                              {renderMediaPreview(item, `Day ${day.day} media ${mediaIndex + 1}`)}
                                               <span className="day-media-card-overlay">View</span>
                                             </div>
                                           ))}
@@ -2870,8 +3003,15 @@ export default function Home() {
                   <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                 </button>
               )}
-              {activeModalItem.type === 'video' ? (
+              {activeModalItem.type === 'video' && clipPreviewUrl(activeModalItem.url) ? (
+                <iframe src={clipPreviewUrl(activeModalItem.url) || ''} title={mediaModal.title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+              ) : activeModalItem.type === 'video' && directVideoUrl(activeModalItem.url) ? (
                 <video src={activeModalItem.url} controls autoPlay playsInline />
+              ) : activeModalItem.type === 'video' ? (
+                <a className="media-modal-link-preview" href={activeModalItem.url} target="_blank" rel="noopener noreferrer">
+                  <span>Open short clip</span>
+                  <strong>{activeModalItem.url}</strong>
+                </a>
               ) : (
                 <img src={activeModalItem.url} alt={`${mediaModal.title} ${mediaModal.index + 1}`} />
               )}
@@ -2892,7 +3032,7 @@ export default function Home() {
                     aria-label={`Show media ${index + 1}`}
                     onClick={() => setMediaModal(current => current ? { ...current, index } : current)}
                   >
-                    {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt="" />}
+                    {renderMediaPreview(item, `${mediaModal.title} thumbnail ${index + 1}`)}
                   </button>
                 ))}
               </div>

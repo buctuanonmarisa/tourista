@@ -10,6 +10,25 @@ const coverPhotoFor = (vlog: { coverImage?: string | null; title: string; locati
 
 const stripNonDigit = (value: unknown) => parseInt(String(value || '').replace(/[^\d]/g, '') || '0')
 
+const buildItineraryMedia = (day: {
+  clipUrl?: string
+  clipUrls?: string[]
+  mediaUrl?: string
+  mediaType?: string
+  media?: Array<{ url: string; type: 'image' | 'video' }>
+}) => {
+  const clipUrls = Array.isArray(day.clipUrls)
+    ? day.clipUrls.map(url => String(url || '').trim()).filter(Boolean)
+    : (day.clipUrl ? [String(day.clipUrl).trim()].filter(Boolean) : [])
+  const uploadedMedia = Array.isArray(day.media) ? day.media.filter(item => item.url) : []
+  const media = [
+    ...clipUrls.map(url => ({ url, type: 'video' as const })),
+    ...uploadedMedia,
+  ]
+  const fallback = day.mediaUrl ? [{ url: day.mediaUrl, type: day.mediaType === 'video' ? 'video' as const : 'image' as const }] : []
+  return media.length ? media : fallback
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const vlog = await prisma.vlog.findUnique({
     where: { id: params.id },
@@ -69,19 +88,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             day: number; activity?: string; cost?: string; locked?: boolean
             highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
             mediaUrl?: string; mediaType?: string; clipUrl?: string
+            clipUrls?: string[]
             media?: Array<{ url: string; type: 'image' | 'video' }>
-          }) => ({
-            day: day.day,
-            activity: day.activity || day.highlights?.slice(0, 120) || `Day ${day.day}`,
-            cost: day.cost ? stripNonDigit(day.cost) : null,
-            locked: day.locked || false,
-            highlights: day.highlights || null,
-            foodTips: day.foodTips || null,
-            gettingThere: day.gettingThere || null,
-            tips: day.tips || null,
-            mediaUrl: day.clipUrl || day.mediaUrl || day.media?.[0]?.url || null,
-            mediaType: day.clipUrl ? 'video' : (day.mediaType || day.media?.[0]?.type || null),
-          })),
+          }) => {
+            const media = buildItineraryMedia(day)
+            return {
+              day: day.day,
+              activity: day.activity || day.highlights?.slice(0, 120) || `Day ${day.day}`,
+              cost: day.cost ? stripNonDigit(day.cost) : null,
+              locked: day.locked || false,
+              highlights: day.highlights || null,
+              foodTips: day.foodTips || null,
+              gettingThere: day.gettingThere || null,
+              tips: day.tips || null,
+              clipDescription: media.length ? JSON.stringify({ media }) : null,
+              mediaUrl: media[0]?.url || null,
+              mediaType: media[0]?.type || null,
+            }
+          }),
         },
       },
       include: { author: true, itinerary: { orderBy: { day: 'asc' } }, reviews: { orderBy: { createdAt: 'desc' }, take: 30 } },

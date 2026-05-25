@@ -63,6 +63,7 @@ jobs:
             echo "Building Docker image with BuildKit..."
             docker build \
               --progress=plain \
+              --cache-from ec2-next:latest \
               --build-arg BUILDKIT_INLINE_CACHE=1 \
               -t ec2-next:latest \
               -f Dockerfile \

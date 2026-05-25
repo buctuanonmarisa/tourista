@@ -121,12 +121,32 @@ const loadOptionLabels = async (category: string, fallback: string[]) => {
   }
 }
 
+const buildItineraryMedia = (day: {
+  clipUrl?: string
+  clipUrls?: string[]
+  mediaUrl?: string
+  mediaType?: string
+  media?: Array<{ url: string; type: 'image' | 'video' }>
+}) => {
+  const clipUrls = Array.isArray(day.clipUrls)
+    ? day.clipUrls.map(url => String(url || '').trim()).filter(Boolean)
+    : (day.clipUrl ? [String(day.clipUrl).trim()].filter(Boolean) : [])
+  const uploadedMedia = Array.isArray(day.media) ? day.media.filter(item => item.url) : []
+  const media = [
+    ...clipUrls.map(url => ({ url, type: 'video' as const })),
+    ...uploadedMedia,
+  ]
+  const fallback = day.mediaUrl ? [{ url: day.mediaUrl, type: day.mediaType === 'video' ? 'video' as const : 'image' as const }] : []
+  return media.length ? media : fallback
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const search = searchParams.get('search') || ''
   const vibe = searchParams.get('vibe') || ''
   const country = searchParams.get('country') || searchParams.get('region') || ''
   const budget = searchParams.get('budget') || ''
+  const access = searchParams.get('access') || ''
   const mine = searchParams.get('mine') === 'true'
 
   const where: Prisma.VlogWhereInput = { status: 'live' }
@@ -147,6 +167,9 @@ export async function GET(req: NextRequest) {
     else if (budget === 'Above ₱30k') where.cost = { gt: 30000 }
     else if (budget === 'Free vlogs only') where.credits = 0
   }
+
+  if (access === 'free') where.credits = 0
+  else if (access === 'unlock') where.credits = { gt: 0 }
 
   if (andFilters.length) where.AND = andFilters
 
@@ -241,20 +264,24 @@ export async function POST(req: NextRequest) {
                   day: number; activity: string; cost: string; locked: boolean
                   highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
                   mediaUrl?: string; mediaType?: string; clipUrl?: string
+                  clipUrls?: string[]
                   media?: Array<{ url: string; type: 'image' | 'video' }>
-                }) => ({
-                  day: d.day,
-                  activity: d.activity || d.highlights?.slice(0, 120) || `Day ${d.day}`,
-                  cost: d.cost ? stripNonDigit(d.cost) : null,
-                  locked: d.locked || false,
-                  highlights: d.highlights || null,
-                  foodTips: d.foodTips || null,
-                  gettingThere: d.gettingThere || null,
-                  tips: d.tips || null,
-                  // Use first media item if available, otherwise use legacy mediaUrl
-                  mediaUrl: d.clipUrl || d.mediaUrl || d.media?.[0]?.url || null,
-                  mediaType: d.clipUrl ? 'video' : (d.mediaType || d.media?.[0]?.type || null),
-                })),
+                }) => {
+                  const media = buildItineraryMedia(d)
+                  return {
+                    day: d.day,
+                    activity: d.activity || d.highlights?.slice(0, 120) || `Day ${d.day}`,
+                    cost: d.cost ? stripNonDigit(d.cost) : null,
+                    locked: d.locked || false,
+                    highlights: d.highlights || null,
+                    foodTips: d.foodTips || null,
+                    gettingThere: d.gettingThere || null,
+                    tips: d.tips || null,
+                    clipDescription: media.length ? JSON.stringify({ media }) : null,
+                    mediaUrl: media[0]?.url || null,
+                    mediaType: media[0]?.type || null,
+                  }
+                }),
               }
             : undefined,
       },

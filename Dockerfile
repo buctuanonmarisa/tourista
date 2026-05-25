@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.6
+
 # Stage 1: Install deps
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -6,7 +8,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install dependencies with optimizations
-RUN npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
