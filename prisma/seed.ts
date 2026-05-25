@@ -1,28 +1,7 @@
 import { PrismaClient } from '@prisma/client'
+import { FALLBACK_BUDGETS, FALLBACK_COUNTRIES, FALLBACK_VIBES, TRAVEL_OPTION_SEEDS } from '../src/lib/travel-options'
 
 const prisma = new PrismaClient()
-
-// Filter values from the frontend
-const VIBES = [
-  'Beach & islands',
-  'Mountain hiking',
-  'City break',
-  'Adventure sports',
-  'Food & culture',
-  'Solo travel',
-  'Family trip',
-  'Road trip',
-  'Backpacking',
-  'Island hopping',
-  'Cultural immersion',
-  'Wildlife & nature',
-  'Photography spots',
-  'Nightlife',
-  'Wellness & spa',
-  'Historical sites',
-]
-
-const REGIONS = ['Philippines', 'Japan', 'Southeast Asia', 'Europe', 'Americas']
 
 const AVATAR_COLORS = ['ag', 'ac', 'ab', 'ap', 'ar', 'as', 'at', 'au', 'av', 'aw']
 const THUMBNAIL_COLORS = ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8']
@@ -321,6 +300,20 @@ async function main() {
   await prisma.itineraryDay.deleteMany({})
   await prisma.vlog.deleteMany({})
   await prisma.user.deleteMany({})
+  await prisma.travelOption.deleteMany({})
+
+  console.log('Creating travel filter options...')
+  await prisma.travelOption.createMany({
+    data: Object.entries(TRAVEL_OPTION_SEEDS).flatMap(([category, labels]) =>
+      labels.map((label, index) => ({
+        category,
+        label,
+        value: label,
+        sortOrder: index,
+        active: true,
+      })),
+    ),
+  })
 
   // Create 10 users with realistic data
   console.log('👥 Creating 10 users...')
@@ -376,7 +369,7 @@ async function main() {
         ratingCount: Math.floor(Math.random() * 500) + 50,
         views: Math.floor(Math.random() * 20000) + 1000,
         likes: Math.floor(Math.random() * 3000) + 100,
-        credits: Math.floor(Math.random() * 3) + 2,
+        credits: i % 5 === 0 ? 0 : Math.floor(Math.random() * 3) + 2,
         description: template.description,
         youtubeUrl: youtubeTravelUrl(template),
         facebookUrl: facebookTravelUrl(template),
@@ -457,6 +450,14 @@ async function main() {
     { title: 'New York Photo Walk: 3 Days of Skyline & Street Shots', location: 'New York City', country: 'USA', region: 'Americas', vibe: 'Photography spots', cost: 52000, duration: 3 },
     { title: 'Banff National Park: Lakes, Wildlife & Mountain Views', location: 'Banff', country: 'Canada', region: 'Americas', vibe: 'Wildlife & nature', cost: 48000, duration: 4 },
     { title: 'Singapore City Break: Hawkers, Gardens & Skyline Views', location: 'Singapore', country: 'Singapore', region: 'Southeast Asia', vibe: 'City break', cost: 30000, duration: 3 },
+    { title: 'Rome Ancient Streets: Colosseum, Trastevere & Pasta Nights', location: 'Rome', country: 'Italy', region: 'Europe', vibe: 'Historical sites', cost: 36000, duration: 4 },
+    { title: 'Santorini Island Sunsets: Villages, Beaches & Caldera Views', location: 'Santorini', country: 'Greece', region: 'Europe', vibe: 'Beach & islands', cost: 40000, duration: 4 },
+    { title: 'Sydney Coastal Weekend: Opera House, Bondi & Harbor Walks', location: 'Sydney', country: 'Australia', region: 'Oceania', vibe: 'City break', cost: 46000, duration: 3 },
+    { title: 'London First-Timer Route: Markets, Museums & Thames Views', location: 'London', country: 'United Kingdom', region: 'Europe', vibe: 'Cultural immersion', cost: 45000, duration: 4 },
+    { title: 'Mexico City Food & Culture: Tacos, Museums & Historic Plazas', location: 'Mexico City', country: 'Mexico', region: 'Americas', vibe: 'Food & culture', cost: 30000, duration: 4 },
+    { title: 'Rio de Janeiro Highlights: Beaches, Viewpoints & Samba Nights', location: 'Rio de Janeiro', country: 'Brazil', region: 'Americas', vibe: 'Nightlife', cost: 34000, duration: 4 },
+    { title: 'Cape Town Nature Loop: Table Mountain, Penguins & Winelands', location: 'Cape Town', country: 'South Africa', region: 'Africa', vibe: 'Wildlife & nature', cost: 38000, duration: 5 },
+    { title: 'Istanbul Crossroads: Bazaars, Mosques & Bosphorus Ferries', location: 'Istanbul', country: 'Turkey', region: 'Europe', vibe: 'Cultural immersion', cost: 28000, duration: 4 },
   ]
 
   const locationGuides: Record<string, {
@@ -569,6 +570,14 @@ async function main() {
     addGuide('New York City', 'Three-day New York photography route covering skyline views, classic streets, bridges, and golden-hour spots without scattering across too many boroughs.', ['DUMBO, Brooklyn Bridge, and Chinatown night shots', 'Central Park, Top of the Rock, and Midtown street scenes', 'West Village, High Line, and Staten Island Ferry skyline'], 'Bagels, pizza slices, halal cart platters, Chinatown dumplings, and deli coffee.', 'Use subway tap-to-pay; group shoots by borough to reduce train backtracking.', 'Carry a small setup because tripods are restricted in many places.')
     addGuide('Banff', 'Four-day Banff National Park route for lake views, wildlife-safe stops, gondola viewpoints, and scenic mountain driving.', ['Banff town arrival, Bow Falls, and Vermilion Lakes sunset', 'Lake Louise, Moraine Lake shuttle, and easy lakeshore walks', 'Icefields Parkway viewpoints and Peyto Lake', 'Banff Gondola, Johnston Canyon, and wildlife-safe evening drive'], 'Pack picnic lunches, try Alberta beef, and book casual dinners in Banff town early.', 'Use Parks Canada shuttles for Moraine Lake and a rental car for Icefields Parkway.', 'Keep distance from wildlife and check seasonal road closures before driving.')
     addGuide('Singapore', 'Three-day Singapore city break with hawker centers, Gardens by the Bay, heritage neighborhoods, and skyline viewpoints grouped by MRT-friendly routes.', ['Marina Bay, Gardens by the Bay, and Spectra light show', 'Chinatown, Maxwell Food Centre, and Kampong Glam', 'Jewel Changi, Orchard, and rooftop skyline finale'], 'Chicken rice, laksa, kaya toast, satay, kopi, and hawker-center desserts.', 'Use MRT and contactless payment; taxis are useful late at night or with luggage.', 'Book paid attractions ahead and leave time for airport Jewel before departure.')
+    addGuide('Rome', 'Four-day Rome history route with ancient landmarks, neighborhood walks, and realistic food stops grouped to avoid crossing the city too often.', ['Colosseum, Roman Forum, and Monti dinner', 'Vatican Museums, St. Peter\'s, and Prati gelato', 'Pantheon, Piazza Navona, and Campo de\' Fiori', 'Trastevere lanes, Janiculum views, and pasta night'], 'Carbonara, supplì, maritozzi, gelato, espresso bars, and trattoria pasta.', 'Use Metro for Colosseum/Vatican days and walk the historic center in clusters.', 'Book Colosseum and Vatican tickets ahead, especially from spring to autumn.')
+    addGuide('Santorini', 'Four-day Santorini island route focused on caldera viewpoints, village walks, beaches, boat time, and sunset pacing.', ['Fira arrival, caldera walk, and sunset dinner', 'Oia lanes, Ammoudi Bay, and blue-domed photo stops', 'Red Beach, Perissa Beach, and winery sunset', 'Caldera boat trip and final village stroll'], 'Greek salad, souvlaki, tomatokeftedes, fresh seafood, and local wine.', 'Use buses between main villages or rent a car/ATV for beach days.', 'Reserve sunset restaurants early and avoid midday walks in peak summer heat.')
+    addGuide('Sydney', 'Three-day Sydney city and coast route with harbor landmarks, beaches, ferries, and walkable neighborhoods.', ['Opera House, Circular Quay, and The Rocks', 'Bondi to Coogee coastal walk and beach afternoon', 'Manly ferry, harbor views, and Surry Hills dinner'], 'Meat pies, flat whites, fish and chips, Thai food, and brunch cafes.', 'Use Opal/contactless payments on trains, buses, light rail, and ferries.', 'Start coastal walks early for better light and fewer crowds.')
+    addGuide('London', 'Four-day London first-timer itinerary balancing museums, markets, river views, and classic neighborhoods.', ['Westminster, South Bank, and Thames evening walk', 'British Museum, Covent Garden, and Soho food stops', 'Tower of London, Borough Market, and Tower Bridge', 'Notting Hill, Hyde Park, and Kensington museums'], 'Market lunches, fish and chips, curries, afternoon tea, and bakery stops.', 'Use the Tube with contactless payment and cluster stops by zone.', 'Many museums are free, but timed slots and paid exhibits should be booked early.')
+    addGuide('Mexico City', 'Four-day Mexico City culture and food route through historic plazas, museums, neighborhoods, and taco stops.', ['Zocalo, Templo Mayor, and Centro Historico food crawl', 'Chapultepec, Anthropology Museum, and Condesa evening', 'Coyoacan, Frida Kahlo Museum, and market lunch', 'Roma Norte cafes, murals, and late taco route'], 'Tacos al pastor, churros, tamales, pozole, tostadas, and cafe de olla.', 'Use Uber/Didi for late evenings and Metro/Metrobus for simple daytime routes.', 'Book Frida Kahlo Museum tickets ahead and watch altitude fatigue on day one.')
+    addGuide('Rio de Janeiro', 'Four-day Rio route with beaches, viewpoints, samba energy, and safer transport choices.', ['Copacabana and Ipanema beach orientation', 'Christ the Redeemer, Botanical Garden, and lagoon sunset', 'Sugarloaf Mountain and Urca evening', 'Santa Teresa, Selaron Steps, and samba night'], 'Acai bowls, feijoada, pão de queijo, grilled seafood, and brigadeiros.', 'Use rideshare at night and official vans/tours for major viewpoints.', 'Keep beach days simple and avoid carrying valuables on the sand.')
+    addGuide('Cape Town', 'Five-day Cape Town nature loop with mountain views, coast roads, penguins, wine country, and city food.', ['V&A Waterfront, Bo-Kaap, and Signal Hill sunset', 'Table Mountain and Camps Bay coast', 'Cape Peninsula drive, Cape Point, and Boulders penguins', 'Kirstenbosch Gardens and Constantia wine route', 'Robben Island or Woodstock market finale'], 'Cape Malay curry, seafood, bobotie, braai, and wine farm lunches.', 'Rent a car or book day tours for peninsula and wine routes; use rideshare in the city.', 'Check Table Mountain wind closures before committing to cableway tickets.')
+    addGuide('Istanbul', 'Four-day Istanbul cultural route linking historic mosques, bazaars, ferry rides, and food neighborhoods across two continents.', ['Sultanahmet: Hagia Sophia, Blue Mosque, and Basilica Cistern', 'Grand Bazaar, Spice Bazaar, and Eminonu street food', 'Bosphorus ferry, Galata, and Karakoy cafes', 'Kadikoy market, Moda waterfront, and final hammam'], 'Simit, kebabs, meze, baklava, Turkish coffee, fish sandwiches, and menemen.', 'Use Istanbulkart for trams, metro, ferries, and buses.', 'Dress modestly for mosques and visit bazaars earlier for calmer browsing.')
 
     const guide = locationGuides[data.location]
     if (!guide) {
@@ -618,7 +627,7 @@ async function main() {
         ratingCount: Math.floor(Math.random() * 300) + 20,
         views: Math.floor(Math.random() * 15000) + 500,
         likes: Math.floor(Math.random() * 2000) + 50,
-        credits: Math.floor(Math.random() * 4) + 1,
+        credits: i % 6 === 0 ? 0 : Math.floor(Math.random() * 4) + 1,
         description: guide?.description || `Complete ${data.location} travel guide covering the best experiences, local tips, and budget breakdown. Perfect for ${data.vibe.toLowerCase()} enthusiasts!`,
         youtubeUrl: youtubeTravelUrl(data),
         facebookUrl: facebookTravelUrl(data),
@@ -669,15 +678,24 @@ async function main() {
 
   const totalVlogs = await prisma.vlog.count()
   const totalReviews = await prisma.review.count()
+  const seededVlogInputs = [
+    ...VLOG_TEMPLATES,
+    ...MORE_VLOG_TEMPLATES,
+    ...additionalVlogData,
+  ]
   const seededVibes = new Set([
-    ...VLOG_TEMPLATES.map(v => v.vibe),
-    ...MORE_VLOG_TEMPLATES.map(v => v.vibe),
-    ...additionalVlogData.map(v => v.vibe),
+    ...seededVlogInputs.map(v => v.vibe),
   ])
-  const seededRegions = new Set([
-    ...VLOG_TEMPLATES.map(v => v.region),
-    ...MORE_VLOG_TEMPLATES.map(v => v.region),
-    ...additionalVlogData.map(v => v.region),
+  const seededCountries = new Set([
+    ...seededVlogInputs.map(v => v.country),
+  ])
+  const seededBudgets = new Set([
+    ...seededVlogInputs.map(v => {
+      if (v.cost < 10000) return 'Under PHP 10k'
+      if (v.cost <= 30000) return 'PHP 10k - PHP 30k'
+      return 'Above PHP 30k'
+    }),
+    'Free vlogs only',
   ])
 
   console.log('✅ Seed complete!')
@@ -685,8 +703,10 @@ async function main() {
   console.log(`   • ${USERS.length} users with social media links`)
   console.log(`   • ${totalVlogs} vlogs with realistic data`)
   console.log(`   • ${totalReviews} authentic reviews`)
-  console.log(`   • Coverage across ${seededVibes.size}/${VIBES.length} frontend vibes`)
-  console.log(`   • Coverage across ${seededRegions.size}/${REGIONS.length} frontend regions`)
+  console.log(`   • Coverage across ${seededVibes.size}/${FALLBACK_VIBES.length} frontend vibes`)
+  console.log(`   • Coverage across ${seededCountries.size}/${FALLBACK_COUNTRIES.length} frontend countries`)
+  console.log(`   • Coverage across ${seededBudgets.size}/4 frontend budget filters`)
+  console.log(`   • ${FALLBACK_COUNTRIES.length + FALLBACK_VIBES.length + FALLBACK_BUDGETS.length} travel filter options saved to the database`)
   console.log(`   • Unlocks and engagement data`)
   console.log(`   • Accessible social media URLs (YouTube, Instagram, TikTok, Facebook)`)
 }

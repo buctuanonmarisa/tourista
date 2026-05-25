@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { DEFAULT_COUNTRY, FALLBACK_COUNTRIES, FALLBACK_VIBES } from '@/lib/travel-options'
 
 const stableImageLock = (value: string) =>
   value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
@@ -9,26 +10,136 @@ const coverPhotoFor = (vlog: { coverImage?: string | null; title: string; locati
   vlog.coverImage ||
   `https://loremflickr.com/1200/800/${encodeURIComponent(vlog.location)},${encodeURIComponent(vlog.country)},travel/all?lock=${stableImageLock(vlog.title)}`
 
+const STOP_WORDS = new Set([
+  'i','me','my','we','us','our','want','wanna','would','like','to','go','visit','see','travel','trip','tour','vlog',
+  'vlogs','video','videos','show','find','search','for','in','at','on','the','a','an','of','and','or','with','near',
+  'around','please','pls','can','you','display','related','similar',
+])
+
+const SYNONYMS: Record<string, string[]> = {
+  'national park': ['national park','park','wildlife','nature','mountain','lake','forest','hiking','banff','kruger','amboseli','tsavo','patagonia'],
+  palawan: ['palawan','el nido','coron','puerto princesa','kayangan lake','philippines','island hopping','beach islands'],
+  island: ['island','islands','beach','beaches','lagoon','snorkeling','diving','island hopping','beach islands'],
+  islands: ['island','islands','beach','beaches','lagoon','snorkeling','diving','island hopping','beach islands'],
+  beach: ['beach','beaches','island','islands','coast','surf','snorkeling','diving','beach islands'],
+  nature: ['nature','wildlife','national park','mountain','lake','forest','hiking'],
+  wildlife: ['wildlife','nature','national park','animals','marine sanctuary','komodo','deer'],
+  food: ['food','street food','food culture','restaurant','market','ramen','hawker'],
+  temple: ['temple','temples','historical sites','culture','heritage','ancient'],
+  temples: ['temple','temples','historical sites','culture','heritage','ancient'],
+}
+
+const normalize = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const unique = (items: string[]) => Array.from(new Set(items.filter(Boolean)))
+
+const buildSearchTerms = (search: string) => {
+  const normalized = normalize(search)
+  if (!normalized) return { phrases: [] as string[], tokens: [] as string[] }
+
+  const rawTokens = normalized.split(' ').filter(token => token.length > 1 && !STOP_WORDS.has(token))
+  const bigrams = rawTokens.slice(0, -1).map((token, index) => `${token} ${rawTokens[index + 1]}`)
+  const phrases = unique([normalized, ...bigrams.filter(phrase => phrase.length > 5)])
+  const expanded = [...rawTokens, ...bigrams].flatMap(term => SYNONYMS[term] || [])
+  const tokens = unique([...rawTokens, ...expanded.flatMap(term => normalize(term).split(' '))])
+    .filter(token => token.length > 1 && !STOP_WORDS.has(token))
+
+  return { phrases, tokens }
+}
+
+const fieldScore = (field: string, phrases: string[], tokens: string[], weight: number) => {
+  const text = normalize(field)
+  if (!text) return 0
+  let score = 0
+
+  for (const phrase of phrases) {
+    if (phrase && text === phrase) score += weight * 2.6
+    else if (phrase && text.includes(phrase)) score += weight * 1.5
+  }
+
+  const words = text.split(' ')
+  for (const token of tokens) {
+    if (words.includes(token)) score += weight
+    else if (text.includes(token)) score += weight * 0.55
+    else if (words.some(word => word.length > 4 && token.length > 4 && (word.startsWith(token) || token.startsWith(word)))) {
+      score += weight * 0.35
+    }
+  }
+
+  return score
+}
+
+type SearchableVlog = {
+  title: string
+  location: string
+  country: string
+  region: string
+  vibe: string
+  description?: string | null
+  views: number
+  trending: boolean
+  author?: { handle: string } | null
+}
+
+const scoreVlog = (
+  vlog: SearchableVlog,
+  search: string,
+) => {
+  const { phrases, tokens } = buildSearchTerms(search)
+  if (phrases.length === 0 && tokens.length === 0) return 0
+
+  const title = fieldScore(vlog.title, phrases, tokens, 90)
+  const location = fieldScore(vlog.location, phrases, tokens, 105)
+  const country = fieldScore(vlog.country, phrases, tokens, 85)
+  const vibe = fieldScore(vlog.vibe, phrases, tokens, 70)
+  const region = fieldScore(vlog.region, phrases, tokens, 45)
+  const description = fieldScore(vlog.description || '', phrases, tokens, 34)
+  const author = fieldScore(vlog.author?.handle || '', phrases, tokens, 12)
+  const popularity = Math.min(35, Math.log10(Math.max(1, vlog.views || 0)) * 6) + (vlog.trending ? 12 : 0)
+
+  return title + location + country + vibe + region + description + author + popularity
+}
+
+const loadOptionLabels = async (category: string, fallback: string[]) => {
+  try {
+    const options = await prisma.travelOption.findMany({
+      where: { category, active: true },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      select: { label: true },
+    })
+    return options.length ? options.map(option => option.label) : fallback
+  } catch {
+    return fallback
+  }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const search = searchParams.get('search') || ''
   const vibe = searchParams.get('vibe') || ''
-  const region = searchParams.get('region') || ''
+  const country = searchParams.get('country') || searchParams.get('region') || ''
   const budget = searchParams.get('budget') || ''
   const mine = searchParams.get('mine') === 'true'
 
   const where: Prisma.VlogWhereInput = { status: 'live' }
 
-  if (search) {
-    where.OR = [
-      { title: { contains: search } },
-      { location: { contains: search } },
-      { country: { contains: search } },
-    ]
+  const andFilters: Prisma.VlogWhereInput[] = []
+  const selectedVibes = vibe.split(',').map(v => v.trim()).filter(v => v && v !== 'All vlogs')
+  if (selectedVibes.length) {
+    andFilters.push({ OR: selectedVibes.map(v => ({ vibe: { contains: v } })) })
   }
-
-  if (vibe && vibe !== 'All vlogs') where.vibe = { contains: vibe }
-  if (region && region !== 'All regions') where.region = region
+  const selectedCountries = country.split(',').map(c => c.trim()).filter(c => c && c !== 'All countries' && c !== 'All regions')
+  if (selectedCountries.length) {
+    andFilters.push({ OR: selectedCountries.map(c => ({ country: c })) })
+  }
 
   if (budget && budget !== 'Any budget') {
     if (budget === 'Under ₱10k') where.cost = { lt: 10000 }
@@ -37,6 +148,8 @@ export async function GET(req: NextRequest) {
     else if (budget === 'Free vlogs only') where.credits = 0
   }
 
+  if (andFilters.length) where.AND = andFilters
+
   const vlogs = await prisma.vlog.findMany({
     where,
     include: {
@@ -44,10 +157,30 @@ export async function GET(req: NextRequest) {
         select: { id: true, handle: true, initials: true, avatarColor: true, verified: true },
       },
     },
-    orderBy: mine ? [{ createdAt: 'desc' }] : [{ trending: 'desc' }, { views: 'desc' }],
+    orderBy: mine || search ? [{ createdAt: 'desc' }] : [{ trending: 'desc' }, { views: 'desc' }],
   })
 
-  return NextResponse.json(vlogs.map(vlog => ({ ...vlog, coverImage: coverPhotoFor(vlog) })))
+  const scored = search
+    ? vlogs
+        .map(vlog => ({ vlog, score: scoreVlog(vlog, search) }))
+        .sort((a, b) => b.score - a.score || Number(b.vlog.trending) - Number(a.vlog.trending) || b.vlog.views - a.vlog.views)
+    : []
+  const relevanceCutoff = scored.length ? Math.max(45, scored[0].score * 0.16) : 0
+  let ranked = search
+    ? scored.filter(item => item.score >= relevanceCutoff).map(item => item.vlog)
+    : vlogs
+
+  const fallback = Boolean(search && ranked.length === 0)
+  if (fallback) {
+    ranked = [...vlogs]
+      .sort((a, b) => Number(b.trending) - Number(a.trending) || b.views - a.views)
+      .slice(0, 12)
+  }
+
+  return NextResponse.json(
+    ranked.map(vlog => ({ ...vlog, coverImage: coverPhotoFor(vlog) })),
+    { headers: fallback ? { 'x-search-fallback': 'true' } : undefined },
+  )
 }
 
 export async function POST(req: NextRequest) {
@@ -67,9 +200,16 @@ export async function POST(req: NextRequest) {
     }
 
     const stripNonDigit = (s: string) => parseInt(String(s).replace(/[^\d]/g, '') || '0')
-    const country = body.country || 'Philippines'
+    const allowedCountries = await loadOptionLabels('country', FALLBACK_COUNTRIES)
+    const allowedVibes = await loadOptionLabels('vibe', FALLBACK_VIBES)
+    const requestedCountry = typeof body.country === 'string' ? body.country.trim() : ''
+    const country = allowedCountries.includes(requestedCountry) ? requestedCountry : DEFAULT_COUNTRY
     const locationBase = body.city || body.cities || body.location || 'Unknown'
-    const vibe = body.vibe || 'All vlogs'
+    const requestedVibes = String(body.vibe || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean)
+    const vibe = requestedVibes.filter(v => allowedVibes.includes(v)).join(',') || allowedVibes[0] || 'All vlogs'
     const title = body.title || 'Untitled Vlog'
     const fallbackCoverImage =
       `https://loremflickr.com/1200/800/${encodeURIComponent(locationBase)},${encodeURIComponent(country)},travel/all?lock=${stableImageLock(title)}`
@@ -79,7 +219,7 @@ export async function POST(req: NextRequest) {
         title,
         location: `${locationBase}, ${country}`,
         country,
-        region: body.region || 'Philippines',
+        region: body.region || country,
         vibe,
         cost: body.cost ? stripNonDigit(body.cost) : null,
         currency: 'PHP',
@@ -100,7 +240,7 @@ export async function POST(req: NextRequest) {
                 create: body.itinerary.map((d: {
                   day: number; activity: string; cost: string; locked: boolean
                   highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
-                  mediaUrl?: string; mediaType?: string
+                  mediaUrl?: string; mediaType?: string; clipUrl?: string
                   media?: Array<{ url: string; type: 'image' | 'video' }>
                 }) => ({
                   day: d.day,
@@ -112,8 +252,8 @@ export async function POST(req: NextRequest) {
                   gettingThere: d.gettingThere || null,
                   tips: d.tips || null,
                   // Use first media item if available, otherwise use legacy mediaUrl
-                  mediaUrl: d.media?.[0]?.url || d.mediaUrl || null,
-                  mediaType: d.media?.[0]?.type || d.mediaType || null,
+                  mediaUrl: d.clipUrl || d.mediaUrl || d.media?.[0]?.url || null,
+                  mediaType: d.clipUrl ? 'video' : (d.mediaType || d.media?.[0]?.type || null),
                 })),
               }
             : undefined,

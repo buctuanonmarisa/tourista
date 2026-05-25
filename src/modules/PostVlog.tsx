@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import EmojiPicker from 'emoji-picker-react'
+import { DEFAULT_COUNTRY, FALLBACK_VIBES } from '@/lib/travel-options'
 
 /**
  * POST VLOG MODULE
@@ -45,7 +46,7 @@ interface PostVlogProps {
 const defaultPostForm: PostFormData = {
   title: '',
   description: '',
-  country: 'Philippines',
+  country: DEFAULT_COUNTRY,
   cities: '',
   vibe: '',
   credits: 2,
@@ -58,24 +59,7 @@ const defaultItinDays: ItineraryFormDay[] = [
   { day: 3, activity: '', cost: '', locked: true, expanded: false },
 ]
 
-const VIBES = [
-  'Beach & islands',
-  'Mountain hiking',
-  'City break',
-  'Adventure sports',
-  'Food & culture',
-  'Solo travel',
-  'Family trip',
-  'Road trip',
-  'Backpacking',
-  'Island hopping',
-  'Cultural immersion',
-  'Wildlife & nature',
-  'Photography spots',
-  'Nightlife',
-  'Wellness & spa',
-  'Historical sites',
-]
+const VIBES = FALLBACK_VIBES
 
 export default function PostVlog({ onPublishSuccess }: PostVlogProps) {
   // ─── State ───

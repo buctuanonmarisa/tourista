@@ -27,6 +27,7 @@ DATABASE_URL=postgresql://user:password@host:5432/tourista
 
 ```bash
 npm run db:seed
+npm run db:seed:clips
 ```
 
 For local development:

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import EmojiPicker from 'emoji-picker-react'
+import { DEFAULT_COUNTRY, FALLBACK_BUDGETS, FALLBACK_COUNTRIES, FALLBACK_VIBES } from '@/lib/travel-options'
+import TourMe from '@/modules/TourMe'
 
 /* ─── Types ──────────────────────────────────────────── */
 interface VlogAuthor {
@@ -12,6 +14,8 @@ interface ItineraryDay {
   id: string; day: number; activity: string; cost?: number | null
   locked: boolean; highlights?: string | null; foodTips?: string | null
   gettingThere?: string | null; tips?: string | null
+  mediaUrl?: string | null; mediaType?: 'image' | 'video' | string | null
+  media?: MediaItem[] | null
 }
 interface Review {
   id: string; authorName: string; rating: number; text: string; createdAt: string
@@ -20,6 +24,7 @@ interface VlogCard {
   id: string; title: string; location: string; cost?: number | null
   currency: string; rating: number; views: number; likes: number
   credits: number; thumbnailColor: string; trending: boolean; author: VlogAuthor
+  country?: string
   description?: string | null; youtubeUrl?: string | null; facebookUrl?: string | null
   tiktokUrl?: string | null; instagramUrl?: string | null; duration?: number | null; coverImage?: string | null
 }
@@ -40,6 +45,7 @@ interface MediaItem {
 interface ItineraryFormDay {
   day: number; activity: string; cost: string; locked: boolean
   mediaUrl?: string; mediaType?: 'image' | 'video' | null
+  clipUrl?: string
   media?: MediaItem[]
   mediaCarouselIndex?: number
   highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
@@ -49,16 +55,14 @@ interface SavedDraft {
   id: string; savedAt: number; title: string
   data: { videoUrl: string; altLinks: { fb: string; tt: string; ig: string }; postForm: typeof defaultPostForm; itinDays: ItineraryFormDay[]; postStep: number }
 }
-const defaultPostForm = { title: '', description: '', country: 'Philippines', cities: '', vibe: '', credits: 2, coverImage: '' }
+const defaultPostForm = { title: '', description: '', country: DEFAULT_COUNTRY, cities: '', vibe: '', credits: 2, coverImage: '' }
 const defaultItinDays: ItineraryFormDay[] = [
   { day: 1, activity: '', cost: '', locked: false, expanded: false },
   { day: 2, activity: '', cost: '', locked: false, expanded: false },
   { day: 3, activity: '', cost: '', locked: true, expanded: false },
 ]
+const SHORT_CLIP_MAX_SECONDS = 60
 
-const VIBES = ['Beach & islands','Mountain hiking','City break','Adventure sports','Food & culture','Solo travel','Family trip','Road trip','Backpacking','Island hopping','Cultural immersion','Wildlife & nature','Photography spots','Nightlife','Wellness & spa','Historical sites']
-const REGIONS = ['All regions','Philippines','Japan','Southeast Asia','Europe','Americas']
-const BUDGETS = ['Any budget','Under ₱10k','₱10k – ₱30k','Above ₱30k','Free vlogs only']
 const stableImageLock = (value: string) =>
   value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
 const fallbackCoverImage = (title: string, location?: string | null, country?: string | null) =>
@@ -145,10 +149,14 @@ export default function Home() {
 
   /* ─── Browse filters ─── */
   const [search, setSearch] = useState('')
-  const [vibe, setVibe] = useState('All vlogs')
-  const [region, setRegion] = useState('All regions')
-  const [budget, setBudget] = useState('Any budget')
-  const [activeFilterTab, setActiveFilterTab] = useState<'vibe' | 'region' | 'budget'>('vibe')
+  const [selectedVibes, setSelectedVibes] = useState<string[]>([])
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([])
+  const [budget, setBudget] = useState('')
+  const [activeFilterTab, setActiveFilterTab] = useState<'vibe' | 'country' | 'budget'>('vibe')
+  const [searchFallback, setSearchFallback] = useState(false)
+  const [countryOptions, setCountryOptions] = useState(FALLBACK_COUNTRIES)
+  const [vibeOptions, setVibeOptions] = useState(FALLBACK_VIBES)
+  const [budgetOptions, setBudgetOptions] = useState(FALLBACK_BUDGETS)
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [activeFeedId, setActiveFeedId] = useState<string | null>(null)
   const feedRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -186,6 +194,7 @@ export default function Home() {
   const [cityFocused, setCityFocused] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState<Record<string, boolean>>({})
   const [emojiPickerField, setEmojiPickerField] = useState<string | null>(null)
+  const [mediaModal, setMediaModal] = useState<{ title: string; items: MediaItem[]; index: number } | null>(null)
   const [creditsReviewed, setCreditsReviewed] = useState(false)
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
   const [drafts, setDrafts] = useState<SavedDraft[]>(() => {
@@ -197,7 +206,7 @@ export default function Home() {
 
   /* ─── Profile form ─── */
   const [pForm, setPForm] = useState({
-    name: '', tagline: '', bio: '', country: 'Philippines',
+    name: '', tagline: '', bio: '', country: DEFAULT_COUNTRY,
     travelStyle: 'Budget', youtubeUrl: '', instagramUrl: '', tiktokUrl: '',
   })
 
@@ -207,8 +216,9 @@ export default function Home() {
 
   /* ─── Dashboard split-view ─── */
   const [selectedMyVlogId, setSelectedMyVlogId] = useState<string | null>(null)
-  const [dashboardMode, setDashboardMode] = useState<'list' | 'details' | 'post' | 'edit'>('list')
+  const [dashboardMode, setDashboardMode] = useState<'list' | 'details' | 'post'>('list')
   const [editingVlogId, setEditingVlogId] = useState<string | null>(null)
+  const [tourMeOpen, setTourMeOpen] = useState(false)
 
   /* ─── Refs for file inputs ─── */
   const coverRef = useRef<HTMLInputElement>(null)
@@ -220,15 +230,16 @@ export default function Home() {
   const fetchVlogs = useCallback(async () => {
     const p = new URLSearchParams()
     if (search) p.set('search', search)
-    if (vibe !== 'All vlogs') p.set('vibe', vibe)
-    if (region !== 'All regions') p.set('region', region)
-    if (budget !== 'Any budget') p.set('budget', budget)
+    if (selectedVibes.length) p.set('vibe', selectedVibes.join(','))
+    if (selectedCountries.length) p.set('country', selectedCountries.join(','))
+    if (budget) p.set('budget', budget)
     try {
       const r = await fetch(`/api/vlogs?${p}`)
       const d = await r.json()
       if (Array.isArray(d)) setVlogs(d)
+      setSearchFallback(Boolean(search) && r.headers.get('x-search-fallback') === 'true')
     } catch { /* ignore */ }
-  }, [search, vibe, region, budget])
+  }, [search, selectedVibes, selectedCountries, budget])
 
   const fetchMyVlogs = useCallback(async () => {
     try {
@@ -246,15 +257,27 @@ export default function Home() {
       setProfile(d)
       setPForm({
         name: d.name || '', tagline: d.tagline || '', bio: d.bio || '',
-        country: d.country || 'Philippines', travelStyle: d.travelStyle || 'Budget',
+        country: d.country || DEFAULT_COUNTRY, travelStyle: d.travelStyle || 'Budget',
         youtubeUrl: d.youtubeUrl || '', instagramUrl: d.instagramUrl || '', tiktokUrl: d.tiktokUrl || '',
       })
     } catch { /* ignore */ }
   }, [])
 
+  const fetchTravelOptions = useCallback(async () => {
+    try {
+      const r = await fetch('/api/travel-options')
+      if (!r.ok) return
+      const d: { countries?: string[]; vibes?: string[]; budgets?: string[] } = await r.json()
+      if (Array.isArray(d.countries) && d.countries.length) setCountryOptions(d.countries)
+      if (Array.isArray(d.vibes) && d.vibes.length) setVibeOptions(d.vibes)
+      if (Array.isArray(d.budgets) && d.budgets.length) setBudgetOptions(d.budgets)
+    } catch { /* keep fallback options */ }
+  }, [])
+
   useEffect(() => { fetchVlogs() }, [fetchVlogs])
   useEffect(() => { fetchMyVlogs() }, [fetchMyVlogs])
   useEffect(() => { fetchProfile() }, [fetchProfile])
+  useEffect(() => { fetchTravelOptions() }, [fetchTravelOptions])
   useEffect(() => {
     if (!activeFeedId) return
     if (!vlogs.some(v => v.id === activeFeedId)) {
@@ -266,7 +289,41 @@ export default function Home() {
   /* ══════════════════════════════════════════
      Navigation
   ══════════════════════════════════════════ */
-  const go = (p: string) => { setPrev(page); setPage(p) }
+  const closeVlogPanels = () => {
+    setActiveFeedId(null)
+    setSelectedMyVlogId(null)
+    setDashboardMode('list')
+    setEditingVlogId(null)
+    setVlog(null)
+    setUnlocked(false)
+    setReviewText('')
+  }
+  const go = (p: string) => {
+    setPrev(page)
+    if (p === 'browse' || p === 'dashboard') closeVlogPanels()
+    setPage(p)
+  }
+  const submitSearch = () => {
+    closeVlogPanels()
+    if (page !== 'browse') {
+      setPrev(page)
+      setPage('browse')
+    }
+  }
+  const toggleVibeFilter = (value: string) => {
+    setSelectedVibes(current =>
+      current.includes(value)
+        ? current.filter(v => v !== value)
+        : [...current, value],
+    )
+  }
+  const toggleCountryFilter = (value: string) => {
+    setSelectedCountries(current =>
+      current.includes(value)
+        ? current.filter(c => c !== value)
+        : [...current, value],
+    )
+  }
 
   const openD = async (from: string, vlogId?: string) => {
     setPrev(from); setPage('detail'); setUnlocked(false); setReviewText('')
@@ -371,7 +428,7 @@ export default function Home() {
     }
     if (postStep === 2) {
       const hasDay = itinDays.some(d =>
-        d.activity.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
+        d.activity.trim() || d.clipUrl?.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
       )
       if (!hasDay) { setPublishError('Please fill in at least one itinerary day.'); return }
       setPostForm(f => ({ ...f, credits: calculateCreditsFromCost() }))
@@ -382,7 +439,7 @@ export default function Home() {
         return
       }
       // Check that at least one day is unlocked (free)
-      const hasFreeDays = itinDays.some(d => !d.locked && (d.activity.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()))
+      const hasFreeDays = itinDays.some(d => !d.locked && (d.activity.trim() || d.clipUrl?.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()))
       if (!hasFreeDays) {
         setPublishError('Please unlock at least one itinerary day so tourists can preview your content.')
         return
@@ -395,7 +452,7 @@ export default function Home() {
   const prevStepFn = () => {
     setPublishError('')
     setCreditsReviewed(false)
-    if (postStep === 1) { go('browse'); return }
+    if (postStep === 1) { go(editingVlogId ? 'dashboard' : 'browse'); return }
     setPostStep(s => s - 1)
   }
 
@@ -406,6 +463,44 @@ export default function Home() {
 
   const updDay = (i: number, k: keyof ItineraryFormDay, v: string | boolean | null) =>
     setItinDays(d => d.map((x, j) => j === i ? { ...x, [k]: v } : x))
+
+  const isShortClipLink = (url: string) => {
+    const value = url.trim().toLowerCase()
+    if (!value) return true
+    return (
+      value.includes('youtube.com/shorts/') ||
+      value.includes('youtu.be/shorts/') ||
+      value.includes('tiktok.com/') ||
+      value.includes('instagram.com/reel/') ||
+      value.includes('instagram.com/reels/') ||
+      value.includes('facebook.com/reel/') ||
+      value.includes('fb.watch/')
+    )
+  }
+
+  const validateShortClipLink = (i: number) => {
+    const clipUrl = itinDays[i]?.clipUrl?.trim() || ''
+    if (!clipUrl || isShortClipLink(clipUrl)) return true
+    window.alert('Please use a short-form clip link that is 1 minute or less, such as YouTube Shorts, TikTok, Instagram Reels, or Facebook Reels. Longer clips will not be processed.')
+    return false
+  }
+
+  const getVideoDuration = (file: File) =>
+    new Promise<number>((resolve, reject) => {
+      const video = document.createElement('video')
+      const url = URL.createObjectURL(file)
+      video.preload = 'metadata'
+      video.onloadedmetadata = () => {
+        const duration = video.duration
+        URL.revokeObjectURL(url)
+        resolve(duration)
+      }
+      video.onerror = () => {
+        URL.revokeObjectURL(url)
+        reject(new Error('Could not read video duration.'))
+      }
+      video.src = url
+    })
 
   const handleEmojiSelect = (fieldId: string, emoji: string) => {
     const textarea = textareaRefs.current[fieldId]
@@ -437,6 +532,18 @@ export default function Home() {
 
   const handleDayMedia = async (i: number, file: File) => {
     const isVideo = file.type.startsWith('video/')
+    if (isVideo) {
+      try {
+        const duration = await getVideoDuration(file)
+        if (duration > SHORT_CLIP_MAX_SECONDS) {
+          window.alert('Each itinerary video clip should be 1 minute or less. This clip is longer than 1 minute and will not be processed.')
+          return
+        }
+      } catch {
+        window.alert('We could not verify this video length. Please upload a clip that is 1 minute or less.')
+        return
+      }
+    }
     const localUrl = URL.createObjectURL(file)
     const mediaType = isVideo ? 'video' : 'image'
 
@@ -469,6 +576,99 @@ export default function Home() {
     }
   }
 
+  const mediaForDay = (day: ItineraryDay | ItineraryFormDay): MediaItem[] => {
+    const formMedia = 'media' in day && Array.isArray(day.media)
+      ? day.media.filter(item => Boolean(item.url))
+      : []
+    const clipMedia = 'clipUrl' in day && day.clipUrl
+      ? [{ url: day.clipUrl, type: 'video' as const }]
+      : []
+    if (formMedia.length || clipMedia.length) {
+      const seen = new Set<string>()
+      return [...clipMedia, ...formMedia].filter(item => {
+        if (seen.has(item.url)) return false
+        seen.add(item.url)
+        return true
+      })
+    }
+    if ('mediaUrl' in day && day.mediaUrl) {
+      return [{ url: day.mediaUrl, type: day.mediaType === 'video' ? 'video' : 'image' }]
+    }
+    return []
+  }
+
+  const openMediaModal = (title: string, items: MediaItem[], index = 0) => {
+    if (!items.length) return
+    setMediaModal({ title, items, index: Math.min(Math.max(index, 0), items.length - 1) })
+  }
+
+  const shiftMediaModal = (delta: number) => {
+    setMediaModal(current => {
+      if (!current) return current
+      return {
+        ...current,
+        index: (current.index + delta + current.items.length) % current.items.length,
+      }
+    })
+  }
+
+  const removeDayMedia = (dayIndex: number, mediaIndex: number) => {
+    setItinDays(days => days.map((day, index) => index === dayIndex ? {
+      ...day,
+      media: (day.media || []).filter((_, itemIndex) => itemIndex !== mediaIndex),
+      mediaCarouselIndex: 0,
+    } : day))
+  }
+
+  const beginEditVlog = (detail: VlogDetail) => {
+    const stripCountry = (location: string) => {
+      const suffix = `, ${detail.country}`
+      return location.toLowerCase().endsWith(suffix.toLowerCase())
+        ? location.slice(0, -suffix.length)
+        : location
+    }
+
+    setEditingVlogId(detail.id)
+    setPostForm({
+      title: detail.title || '',
+      description: detail.description || '',
+      country: detail.country || DEFAULT_COUNTRY,
+      cities: stripCountry(detail.location || ''),
+      vibe: detail.vibe || '',
+      credits: detail.credits || 0,
+      coverImage: detail.coverImage || '',
+    })
+    setVideoUrl(detail.youtubeUrl || detail.facebookUrl || detail.tiktokUrl || detail.instagramUrl || '')
+    setVideoDetected('')
+    setAltLinks({
+      fb: detail.facebookUrl || '',
+      tt: detail.tiktokUrl || '',
+      ig: detail.instagramUrl || '',
+    })
+    setItinDays(detail.itinerary.length ? detail.itinerary.map(day => ({
+      day: day.day,
+      activity: day.activity || '',
+      cost: day.cost ? String(day.cost) : '',
+      locked: day.locked,
+      media: mediaForDay(day),
+      mediaUrl: day.mediaUrl || undefined,
+      mediaType: day.mediaType === 'video' ? 'video' : day.mediaUrl ? 'image' : null,
+      clipUrl: day.mediaType === 'video' ? day.mediaUrl || '' : '',
+      highlights: day.highlights || '',
+      foodTips: day.foodTips || '',
+      gettingThere: day.gettingThere || '',
+      tips: day.tips || '',
+      expanded: true,
+    })) : defaultItinDays.map(day => ({ ...day })))
+    setPostStep(1)
+    setPostView('form')
+    setPublishError('')
+    setCreditsReviewed(false)
+    setVibeInput('')
+    setVibeFocused(false)
+    go('post')
+  }
+
   const publishVlog = async () => {
     setPublishing(true); setPublishError('')
     try {
@@ -477,8 +677,13 @@ export default function Home() {
       const isTt = videoUrl.includes('tiktok')
       const isIg = videoUrl.includes('instagram')
       const filledDays = itinDays.filter(d =>
-        d.activity.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
+        d.activity.trim() || d.clipUrl?.trim() || d.highlights?.trim() || d.foodTips?.trim() || d.gettingThere?.trim() || d.tips?.trim()
       )
+      const invalidClip = filledDays.find(day => day.clipUrl?.trim() && !isShortClipLink(day.clipUrl))
+      if (invalidClip) {
+        setPublishError(`Day ${invalidClip.day} has a clip link that is not recognized as a short-form video. Use a YouTube Shorts, TikTok, Instagram Reels, or Facebook Reels link that is 1 minute or less.`)
+        return
+      }
       if (coverUploading || Object.values(dayUploading).some(Boolean)) {
         setPublishError('Please wait for uploads to finish before publishing.')
         return
@@ -487,8 +692,8 @@ export default function Home() {
         setPublishError('Cover photo is still uploading or failed. Please re-upload it before publishing.')
         return
       }
-      const r = await fetch('/api/vlogs', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const r = await fetch(editingVlogId ? `/api/vlogs/${editingVlogId}` : '/api/vlogs', {
+        method: editingVlogId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...postForm,
           credits: Math.max(0, Number(postForm.credits) || 0),
@@ -498,11 +703,13 @@ export default function Home() {
           instagramUrl: isIg ? videoUrl : (altLinks.ig || null),
           itinerary: filledDays.map(day => ({
             ...day,
+            mediaUrl: day.clipUrl?.trim() || day.media?.find(m => !m.url.startsWith('blob:'))?.url || day.mediaUrl || null,
+            mediaType: day.clipUrl?.trim() ? 'video' : (day.media?.find(m => !m.url.startsWith('blob:'))?.type || day.mediaType || null),
             media: day.media?.filter(m => !m.url.startsWith('blob:')) || [],
           })),
         }),
       })
-      if (!r.ok) { const e = await r.json().catch(() => ({})); setPublishError(e.error || 'Failed to publish. Please try again.'); return }
+      if (!r.ok) { const e = await r.json().catch(() => ({})); setPublishError(e.error || `Failed to ${editingVlogId ? 'save changes' : 'publish'}. Please try again.`); return }
       const created: VlogCard = await r.json()
       setSelectedMyVlogId(created.id)
       setDashboardMode('details')
@@ -528,6 +735,7 @@ export default function Home() {
       setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' }); setPostStep(1)
       setVibeInput(''); setVibeFocused(false)
       setItinDays(defaultItinDays.map(d => ({ ...d })))
+      setEditingVlogId(null)
     } catch (e) {
       setPublishError(e instanceof Error ? `Network error: ${e.message}` : 'Network error. Please try again.')
     } finally { setPublishing(false) }
@@ -597,7 +805,7 @@ export default function Home() {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(pForm),
     })
-    await fetchProfile(); go('profile')
+    await fetchProfile(); go('dashboard')
   }
 
   const handleUpload = async (file: File) => {
@@ -644,11 +852,17 @@ export default function Home() {
     if (!cost) return ''
     return cur === 'JPY' ? `¥${cost.toLocaleString()}` : `₱${cost.toLocaleString()}`
   }
-  const activeFilters = [vibe !== 'All vlogs' ? vibe : '', region !== 'All regions' ? region : '', budget !== 'Any budget' ? budget : ''].filter(Boolean)
+  const activeFilters = [
+    ...selectedVibes,
+    ...selectedCountries,
+    budget,
+  ].filter(Boolean)
   const embedUrl = getVlogEmbedUrl(vlog?.youtubeUrl)
   const relatedCreatorVlogs = vlog
     ? vlogs.filter(v => v.author.id === vlog.author.id && v.id !== vlog.id).slice(0, 3)
     : []
+  const countryFilters = countryOptions.filter(c => c !== 'All countries' && c !== 'All regions')
+  const budgetFilters = budgetOptions.filter(b => b !== 'Any budget')
   const updCr = (v: number) => {
     setPostForm(f => ({ ...f, credits: v }))
   }
@@ -676,6 +890,7 @@ export default function Home() {
   }
   const stepLbl = (n: number) => n === postStep ? 'sl2 ac' : 'sl2'
   const stepLine = (n: number) => n < postStep ? 'sln dn' : 'sln'
+  const activeModalItem = mediaModal ? mediaModal.items[mediaModal.index] : null
 
   /* ══════════════════════════════════════════
      RENDER
@@ -704,10 +919,17 @@ export default function Home() {
             <div className="tn-search-icon">
               <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             </div>
-            <input type="text" placeholder="Search destinations, vloggers..." value={search}
-              onChange={e => setSearch(e.target.value)}/>
+            <input
+              type="text"
+              placeholder="Search destinations, vloggers..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitSearch()
+              }}
+            />
             {search && (
-              <button className="tn-search-clear" onClick={() => setSearch('')}>
+              <button className="tn-search-clear" onClick={() => setSearch('')} aria-label="Clear search">
                 <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             )}
@@ -724,37 +946,47 @@ export default function Home() {
               <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
               <span className="tn-btn-label">Dashboard</span>
             </button>
+            <button className="tn-btn tn-tour" onClick={() => setTourMeOpen(true)} aria-label="Tour me">
+              <svg viewBox="0 0 24 24"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
+              <span className="tn-btn-label">Tour me</span>
+            </button>
             <button className="tn-btn tn-post" onClick={() => {
               setPostForm({ ...defaultPostForm })
               setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' })
               setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError('')
               setVibeInput(''); setVibeFocused(false)
               setPostView('form')
+              setEditingVlogId(null)
               go('post')
             }}>
               <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span className="tn-btn-label">Post vlog</span>
             </button>
-            <button className="tn-avatar" onClick={() => go('profile')} title="Profile">{profile?.initials || 'M'}</button>
           </div>
         </div>
       </div>
 
       {/* Old navigation hidden - using new topnav instead */}
 
+      <TourMe
+        open={tourMeOpen}
+        onClose={() => setTourMeOpen(false)}
+        vlogs={vlogs}
+        profileInitials={profile?.initials || 'ME'}
+      />
       {/* ── FILTER BAR ───────────────────────────────── */}
       {page === 'browse' && (
         <div className="filterbar">
           <div className="filterbar-inner">
             <div className="fb-tabs">
               <button className={`fb-tab${activeFilterTab === 'vibe' ? ' on' : ''}`} onClick={() => setActiveFilterTab('vibe')}>
-                Vibe {vibe !== 'All vlogs' && <span className="fb-tab-count">{vibe}</span>}
+                Vibe {selectedVibes.length > 0 && <span className="fb-tab-count">{selectedVibes.length}</span>}
               </button>
-              <button className={`fb-tab${activeFilterTab === 'region' ? ' on' : ''}`} onClick={() => setActiveFilterTab('region')}>
-                Region {region !== 'All regions' && <span className="fb-tab-count">{region}</span>}
+              <button className={`fb-tab${activeFilterTab === 'country' ? ' on' : ''}`} onClick={() => setActiveFilterTab('country')}>
+                Country {selectedCountries.length > 0 && <span className="fb-tab-count">{selectedCountries.length}</span>}
               </button>
               <button className={`fb-tab${activeFilterTab === 'budget' ? ' on' : ''}`} onClick={() => setActiveFilterTab('budget')}>
-                Budget {budget !== 'Any budget' && <span className="fb-tab-count">{budget}</span>}
+                Budget {budget && <span className="fb-tab-count">{budget}</span>}
               </button>
             </div>
           </div>
@@ -767,28 +999,28 @@ export default function Home() {
             <div className="fb-chips">
               {activeFilterTab === 'vibe' && (
                 <>
-                  {VIBES.map(v => (
-                    <span key={v} className={`fb-chip${vibe === v ? ' on' : ''}`} onClick={() => setVibe(vibe === v ? 'All vlogs' : v)}>
+                  {vibeOptions.map(v => (
+                    <span key={v} className={`fb-chip${selectedVibes.includes(v) ? ' on' : ''}`} onClick={() => toggleVibeFilter(v)}>
                       <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%232A7A50" width="100" height="100"/></svg>')`}}/>
                       {v}
                     </span>
                   ))}
                 </>
               )}
-              {activeFilterTab === 'region' && (
+              {activeFilterTab === 'country' && (
                 <>
-                  {REGIONS.map(r => (
-                    <span key={r} className={`fb-chip${region === r ? ' on' : ''}`} onClick={() => setRegion(region === r ? 'All regions' : r)}>
+                  {countryFilters.map(c => (
+                    <span key={c} className={`fb-chip${selectedCountries.includes(c) ? ' on' : ''}`} onClick={() => toggleCountryFilter(c)}>
                       <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%230876A8"/></svg>')`}}/>
-                      {r}
+                      {c}
                     </span>
                   ))}
                 </>
               )}
               {activeFilterTab === 'budget' && (
                 <>
-                  {BUDGETS.map(b => (
-                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(budget === b ? 'Any budget' : b)}>
+                  {budgetFilters.map(b => (
+                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(budget === b ? '' : b)}>
                       <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23D08A0A" width="100" height="100"/></svg>')`}}/>
                       {b}
                     </span>
@@ -810,6 +1042,11 @@ export default function Home() {
         <div className="tn-page">
           <div className={`gi-layout${vlog && activeFeedId ? ' with-panel' : ''}`}>
             {/* Vlog Grid */}
+            {searchFallback && search && (
+              <div className="search-fallback-note">
+                No exact matches for <strong>{search}</strong>. You may like these vlogs.
+              </div>
+            )}
             {vlogs.length === 0 ? (
               <div className="vl-empty">No vlogs found — try adjusting your filters.</div>
             ) : (
@@ -946,22 +1183,50 @@ export default function Home() {
                   {/* Itinerary */}
                   {vlog.itinerary.length > 0 && (
                     <>
-                      <div style={{ fontSize:'13px', fontWeight:600, color:'var(--color-text-primary)', marginBottom:'10px', marginTop:'14px' }}>Day-by-day itinerary</div>
+                      <div className="gi-panel-section-title">Day-by-day itinerary</div>
                       {vlog.itinerary.map(day => (
-                        <div key={day.id} style={{ padding:'10px', background:'var(--color-bg-secondary)', borderRadius:'8px', marginBottom:'8px', opacity: day.locked && !unlocked ? 0.45 : 1 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px' }}>
-                            <div style={{ fontSize:'12px', fontWeight:600, color: day.locked && !unlocked ? 'var(--color-text-secondary)' : 'var(--g)' }}>
+                        <div key={day.id} className="gi-itinerary-card" style={{ opacity: day.locked && !unlocked ? 0.55 : 1 }}>
+                          <div className="gi-itinerary-head">
+                            <div className="gi-itinerary-day" style={{ color: day.locked && !unlocked ? 'var(--color-text-secondary)' : 'var(--g)' }}>
                               Day {day.day}
                             </div>
-                            <div style={{ fontSize:'12px', color:'var(--color-text-primary)' }}>{day.activity}</div>
+                            <div className="gi-itinerary-activity">{day.activity}</div>
                           </div>
                           {(day.cost && (!day.locked || unlocked)) && (
                             <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'6px' }}>💰 ₱{day.cost.toLocaleString()}</div>
                           )}
+                          {(!day.locked || unlocked) && (() => {
+                            const dayMedia = mediaForDay(day)
+                            if (!dayMedia.length) return null
+                            return (
+                              <>
+                                <div className="detail-media-grid">
+                                  {dayMedia.map((item, mediaIndex) => (
+                                    <div
+                                      key={`${item.url}-${mediaIndex}`}
+                                      className="day-media-card"
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)}
+                                      onKeyDown={event => {
+                                        if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)
+                                      }}
+                                    >
+                                      {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={`Day ${day.day} media ${mediaIndex + 1}`} />}
+                                      <span className="day-media-card-overlay">View</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button type="button" className="day-media-open compact" onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, 0)}>
+                                  View media ({dayMedia.length})
+                                </button>
+                              </>
+                            )
+                          })()}
                           {day.locked && !unlocked ? (
                             <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', display:'flex', alignItems:'center', gap:'4px' }}>
                               <svg viewBox="0 0 24 24" width="12" height="12" style={{ stroke:'currentColor', fill:'none', strokeWidth:2 }}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                              Unlock to see details
+                              Unlock to see the full day plan
                             </div>
                           ) : (
                             <>
@@ -1053,7 +1318,7 @@ export default function Home() {
 
                 {/* Title + author */}
                 <div className="dtt">{vlog.title}</div>
-                <div className="dvl" onClick={() => go('profile')}>
+                <div className="dvl" onClick={() => go('dashboard')}>
                   <div className={`av ${vlog.author.avatarColor}`} style={{ width:'34px', height:'34px', fontSize:'11px' }}>{vlog.author.initials}</div>
                   <div>
                     <div className="dvln">{vlog.author.handle} {vlog.author.verified && <span className="bx bf" style={{ fontSize:'10px' }}>✓ Verified</span>}</div>
@@ -1135,6 +1400,34 @@ export default function Home() {
                             <div className="ico"><span className="ico-lbl">Cost</span> ₱{day.cost.toLocaleString()}</div>
                           )}
                         </div>
+                        {(!day.locked || unlocked) && (() => {
+                          const dayMedia = mediaForDay(day)
+                          if (!dayMedia.length) return null
+                          return (
+                            <>
+                              <div className="detail-media-grid">
+                                {dayMedia.map((item, mediaIndex) => (
+                                  <div
+                                    key={`${item.url}-${mediaIndex}`}
+                                    className="day-media-card"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)}
+                                    onKeyDown={event => {
+                                      if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)
+                                    }}
+                                  >
+                                    {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={`Day ${day.day} media ${mediaIndex + 1}`} />}
+                                    <span className="day-media-card-overlay">View</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <button type="button" className="day-media-open compact" onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, 0)}>
+                                View media ({dayMedia.length})
+                              </button>
+                            </>
+                          )
+                        })()}
                         {day.locked && !unlocked ? (
                           <div className="ilk">
                             <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -1318,7 +1611,7 @@ export default function Home() {
               <div className="fg">
                 <label>Country / base</label>
                 <select className="fi" value={pForm.country} onChange={e => setPForm(f => ({ ...f, country: e.target.value }))}>
-                  <option>Philippines</option><option>Japan</option><option>Vietnam</option><option>Thailand</option>
+                  {countryOptions.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div className="fg">
@@ -1346,7 +1639,7 @@ export default function Home() {
               </div>
             </div>
             <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', paddingTop:'16px', borderTop:'1px solid var(--color-border-tertiary)' }}>
-              <button className="bb" onClick={() => go('profile')}>Cancel</button>
+              <button className="bb" onClick={() => go('dashboard')}>Cancel</button>
               <button className="nb" onClick={saveProfile}>Save changes</button>
             </div>
           </div>
@@ -1396,7 +1689,9 @@ export default function Home() {
             {/* ── Form view ── */}
             {postView === 'form' && <>
             <div style={{ fontSize:'24px', fontWeight:800, marginBottom:'4px', color:'var(--color-text-primary)' }}>Post a vlog</div>
-            <div style={{ fontSize:'14px', color:'var(--color-text-secondary)', marginBottom:'22px' }}>Share your journey. Earn when tourists unlock your itinerary.</div>
+          <div style={{ fontSize:'14px', color:'var(--color-text-secondary)', marginBottom:'22px' }}>
+            {editingVlogId ? 'Update your vlog details, itinerary, media, and credits.' : 'Share your journey. Earn when tourists unlock your itinerary.'}
+          </div>
 
             {/* Step indicator */}
             <div className="steps">
@@ -1499,7 +1794,7 @@ export default function Home() {
                   <div className="fg">
                     <label>Country</label>
                     <select className="fi" value={postForm.country} onChange={e => setPostForm(f => ({ ...f, country: e.target.value }))}>
-                      <option>Philippines</option><option>Japan</option><option>Vietnam</option><option>Thailand</option><option>Indonesia</option><option>Other</option>
+                      {countryOptions.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div className="fg">
@@ -1590,7 +1885,7 @@ export default function Home() {
                           if (e.key === 'Enter' && vibeInput.trim()) {
                             e.preventDefault()
                             const existing = postForm.vibe.split(',').filter(Boolean)
-                            const match = VIBES.find(v => v.toLowerCase() === vibeInput.trim().toLowerCase())
+                            const match = vibeOptions.find(v => v.toLowerCase() === vibeInput.trim().toLowerCase())
                             const val = match || vibeInput.trim()
                             if (!existing.includes(val)) {
                               setPostForm(f => ({ ...f, vibe: [...existing, val].join(',') }))
@@ -1605,7 +1900,7 @@ export default function Home() {
                       />
                       {(vibeFocused) && (() => {
                         const existing = postForm.vibe.split(',').filter(Boolean)
-                        const opts = VIBES.filter(v => !existing.includes(v) && (!vibeInput || v.toLowerCase().includes(vibeInput.toLowerCase())))
+                        const opts = vibeOptions.filter(v => !existing.includes(v) && (!vibeInput || v.toLowerCase().includes(vibeInput.toLowerCase())))
                         return opts.length > 0 ? (
                           <div className="vdrop">
                             {opts.map(v => (
@@ -1629,6 +1924,7 @@ export default function Home() {
                 <div className="step-hint">
                   Add each day with a summary and optional cost. Mark days as <strong>Locked</strong> so tourists pay credits to access them — that&apos;s how you earn. Expand any day to add photos, food tips, and travel notes.
                 </div>
+                <div className="short-clip-note post-wide">Each day can include a short clip link or upload. Video clips must be 1 minute or less, otherwise they will not be processed.</div>
                 {itinDays.map((d, i) => (
                   <div key={d.day} className={`day-card${d.expanded ? ' open' : ''}`}>
                     {/* Day header row */}
@@ -1658,91 +1954,65 @@ export default function Home() {
 
                         {/* Media carousel gallery */}
                         <div>
+                          <div className="short-clip-note">Each itinerary video clip should be 1 minute or less. Longer clips will not be processed.</div>
+                          <div className="short-clip-link">
+                            <input
+                              className="fi"
+                              type="url"
+                              placeholder="Short clip link, e.g. https://www.youtube.com/shorts/xwxVLYISc5g"
+                              value={d.clipUrl || ''}
+                              onChange={e => updDay(i, 'clipUrl', e.target.value)}
+                              onBlur={() => validateShortClipLink(i)}
+                            />
+                          </div>
                           <span className="day-sub-lbl">📸 Photos & videos for this day</span>
-                          {(d.media && d.media.length > 0) ? (
-                            <div style={{ position:'relative', borderRadius:'10px', overflow:'hidden', background:'var(--color-background-secondary)' }}>
-                              {/* Carousel display */}
-                              <div style={{ position:'relative', width:'100%', paddingBottom:'56.25%', background:'#000' }}>
-                                {d.media[d.mediaCarouselIndex || 0]?.type === 'video' ? (
-                                  <video
-                                    src={d.media[d.mediaCarouselIndex || 0].url}
-                                    controls
-                                    style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'contain' }}
-                                  />
-                                ) : (
-                                  <img
-                                    src={d.media[d.mediaCarouselIndex || 0].url}
-                                    alt={`Day ${d.day} media`}
-                                    style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'contain' }}
-                                  />
-                                )}
-                              </div>
-
-                              {/* Navigation arrows */}
-                              {d.media.length > 1 && (
-                                <>
-                                  <button
-                                    onClick={() => setItinDays(days => days.map((x, j) => j === i ? {
-                                      ...x,
-                                      mediaCarouselIndex: ((x.mediaCarouselIndex || 0) - 1 + (x.media?.length || 1)) % (x.media?.length || 1)
-                                    } : x))}
-                                    style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', background:'rgba(0,0,0,.5)', color:'#fff', border:'none', borderRadius:'50%', width:'36px', height:'36px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', zIndex:10 }}
-                                  >
-                                    ‹
-                                  </button>
-                                  <button
-                                    onClick={() => setItinDays(days => days.map((x, j) => j === i ? {
-                                      ...x,
-                                      mediaCarouselIndex: ((x.mediaCarouselIndex || 0) + 1) % (x.media?.length || 1)
-                                    } : x))}
-                                    style={{ position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', background:'rgba(0,0,0,.5)', color:'#fff', border:'none', borderRadius:'50%', width:'36px', height:'36px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', zIndex:10 }}
-                                  >
-                                    ›
-                                  </button>
-                                </>
-                              )}
-
-                              {/* Dot indicators */}
-                              {d.media.length > 1 && (
-                                <div style={{ position:'absolute', bottom:'10px', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'6px', zIndex:10 }}>
-                                  {d.media.map((_, idx) => (
-                                    <button
-                                      key={idx}
-                                      onClick={() => setItinDays(days => days.map((x, j) => j === i ? { ...x, mediaCarouselIndex: idx } : x))}
-                                      style={{
-                                        width:'8px',
-                                        height:'8px',
-                                        borderRadius:'50%',
-                                        border:'none',
-                                        background: idx === (d.mediaCarouselIndex || 0) ? '#fff' : 'rgba(255,255,255,.5)',
-                                        cursor:'pointer',
-                                        transition:'all .2s'
+                          {(() => {
+                            const dayMedia = mediaForDay(d)
+                            if (!dayMedia.length) return null
+                            return (
+                              <>
+                                <div className="day-media-grid">
+                                  {dayMedia.map((item, mediaIndex) => (
+                                    <div
+                                      key={`${item.url}-${mediaIndex}`}
+                                      className="day-media-card"
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={() => openMediaModal(`Day ${d.day} photos & videos`, dayMedia, mediaIndex)}
+                                      onKeyDown={event => {
+                                        if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${d.day} photos & videos`, dayMedia, mediaIndex)
                                       }}
-                                    />
+                                    >
+                                      {item.type === 'video' ? (
+                                        <video src={item.url} muted playsInline />
+                                      ) : (
+                                        <img src={item.url} alt={`Day ${d.day} media ${mediaIndex + 1}`} />
+                                      )}
+                                      <span className="day-media-card-overlay">View</span>
+                                      <button
+                                        type="button"
+                                        className="day-media-remove"
+                                        aria-label="Remove media"
+                                        onClick={event => {
+                                          event.stopPropagation()
+                                          if (item.url === d.clipUrl) {
+                                            updDay(i, 'clipUrl', '')
+                                          } else {
+                                            removeDayMedia(i, mediaIndex - (d.clipUrl ? 1 : 0))
+                                          }
+                                        }}
+                                      >
+                                        x
+                                      </button>
+                                    </div>
                                   ))}
                                 </div>
-                              )}
-
-                              {/* Counter */}
-                              <div style={{ position:'absolute', top:'10px', right:'10px', background:'rgba(0,0,0,.6)', color:'#fff', padding:'4px 10px', borderRadius:'6px', fontSize:'12px', fontWeight:600, zIndex:10 }}>
-                                {(d.mediaCarouselIndex || 0) + 1}/{d.media.length}
-                              </div>
-
-                              {/* Delete button */}
-                              <button
-                                onClick={() => setItinDays(days => days.map((x, j) => j === i ? {
-                                  ...x,
-                                  media: (x.media || []).filter((_, idx) => idx !== (x.mediaCarouselIndex || 0)),
-                                  mediaCarouselIndex: Math.max(0, (x.mediaCarouselIndex || 0) - 1)
-                                } : x))}
-                                className="cover-remove"
-                                style={{ top:'10px', right:'10px' }}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ) : null}
-
+                                <button type="button" className="day-media-open" onClick={() => openMediaModal(`Day ${d.day} photos & videos`, dayMedia, 0)}>
+                                  View media ({dayMedia.length})
+                                </button>
+                              </>
+                            )
+                          })()}
                           {/* Add more button */}
                           <div
                             className={`day-media-zone${dayUploading[i] ? ' upload-zone-uploading' : ''}`}
@@ -1762,7 +2032,7 @@ export default function Home() {
                           >
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                             <span style={{ fontSize:'12.5px', color:'var(--color-text-secondary)', fontWeight:500 }}>
-                              {dayUploading[i] ? 'Uploading…' : (d.media && d.media.length > 0 ? 'Add more photos/videos' : 'Upload photos or videos')}
+                              {dayUploading[i] ? 'Uploading...' : (d.media && d.media.length > 0 ? 'Add more photos/video clips' : 'Upload photos or video clips')}
                             </span>
                           </div>
                         </div>
@@ -2005,7 +2275,7 @@ export default function Home() {
                   <button className="bb" onClick={saveDraft}>Save draft</button>
                 )}
                 <button className="nb" onClick={nextStep} disabled={publishing || (postStep === 3 && !creditsReviewed)}>
-                  {postStep === 3 ? (publishing ? 'Publishing…' : 'Publish →') : 'Continue →'}
+                  {postStep === 3 ? (publishing ? (editingVlogId ? 'Saving…' : 'Publishing…') : (editingVlogId ? 'Save changes →' : 'Publish →')) : 'Continue →'}
                 </button>
               </div>
             </div>
@@ -2047,14 +2317,84 @@ export default function Home() {
       ══════════════════════════════════════ */}
       {page === 'dashboard' && (
         <div className="tn-page">
-          <div className={`gi-layout${selectedMyVlogId || dashboardMode !== 'list' ? ' with-panel' : ''}`}>
+          <div className={`gi-layout dashboard-layout${selectedMyVlogId || dashboardMode !== 'list' ? ' with-panel' : ''}`}>
+            <div className="dash-compact-summary">
+              <div className="dash-compact-profile">
+                <div className="dash-compact-avatar">{profile?.initials || 'M'}</div>
+                <div className="dash-compact-copy">
+                  <div className="dash-compact-name">{profile?.name || 'MarisolRoams'}</div>
+                  <div className="dash-compact-meta">@{profile?.handle || 'marisolroams'} Â· {profile?.country || DEFAULT_COUNTRY}</div>
+                  {profile?.tagline && <div className="dash-compact-tagline">{profile.tagline}</div>}
+                </div>
+                <button className="edbtn dash-compact-edit" onClick={() => go('edit')}>
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Edit profile
+                </button>
+              </div>
+              <div className="dash-compact-kpis">
+                <div className="dash-mini-kpi"><span>Earnings</span><strong>â‚±{(profile?.earnings || 4320).toLocaleString()}</strong></div>
+                <div className="dash-mini-kpi"><span>Views</span><strong>{((profile?.totalViews || 38400)/1000).toFixed(1)}k</strong></div>
+                <div className="dash-mini-kpi"><span>Vlogs</span><strong>{myVlogs.length || profile?.vlogCount || 48}</strong></div>
+                <div className="dash-mini-kpi"><span>Avg rating</span><strong>{(profile?.avgRating || 4.8).toFixed(1)}</strong></div>
+              </div>
+            </div>
             {/* Left Panel - Dashboard KPIs & Vlog List */}
             <div className="gi-panel-left" style={{ padding:'20px' }}>
-              <div style={{ width:'100%' }}>
-                <div style={{ fontSize:'22px', fontWeight:700, marginBottom:'3px' }}>
-                  Good morning, <span style={{ color:'var(--g)' }}>{profile?.name?.split(/\s|R/)[0] || 'Marisol'}</span>
+              <div className="dashboard-left-content" style={{ width:'100%' }}>
+                <div className="dash-profile">
+                  <div className="dash-cover">
+                    <div className="dash-cover-mark">Tourista</div>
+                  </div>
+                  <div className="dash-profile-body">
+                    <div className="dash-avatar">{profile?.initials || 'M'}</div>
+                    <div className="dash-profile-main">
+                      <div className="dash-profile-row">
+                        <div className="emoji-field">
+                          <div className="dash-name">{profile?.name || 'MarisolRoams'}</div>
+                          <div className="dash-meta">
+                            {profile?.verified && 'Verified · '}
+                            @{profile?.handle || 'marisolroams'} · {profile?.country || DEFAULT_COUNTRY}
+                          </div>
+                        </div>
+                        <button className="edbtn" onClick={() => go('edit')}>
+                          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          Edit profile
+                        </button>
+                      </div>
+                      {profile?.tagline && <div className="dash-tagline">{profile.tagline}</div>}
+                      {profile?.bio && <div className="dash-bio">{profile.bio}</div>}
+                      <div className="dash-socials">
+                        {profile?.youtubeUrl && <a href={profile.youtubeUrl} target="_blank" rel="noopener noreferrer"><span className="pdot" style={{ background:'#f00' }}/> YouTube</a>}
+                        {profile?.instagramUrl && <a href={profile.instagramUrl} target="_blank" rel="noopener noreferrer"><span className="pdot" style={{ background:'#e1306c' }}/> Instagram</a>}
+                        {profile?.tiktokUrl && <a href={profile.tiktokUrl} target="_blank" rel="noopener noreferrer"><span className="pdot" style={{ background:'#111' }}/> TikTok</a>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize:'14px', color:'var(--color-text-secondary)', marginBottom:'20px' }}>Your vlog performance this month</div>
+                <div className="dash-compact-summary">
+                  <div className="dash-compact-profile">
+                    <div className="dash-compact-avatar">{profile?.initials || 'M'}</div>
+                    <div className="dash-compact-copy">
+                      <div className="dash-compact-name">{profile?.name || 'MarisolRoams'}</div>
+                      <div className="dash-compact-meta">@{profile?.handle || 'marisolroams'} Â· {profile?.country || DEFAULT_COUNTRY}</div>
+                      {profile?.tagline && <div className="dash-compact-tagline">{profile.tagline}</div>}
+                    </div>
+                    <button className="edbtn dash-compact-edit" onClick={() => go('edit')}>
+                      <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Edit profile
+                    </button>
+                  </div>
+                  <div className="dash-compact-kpis">
+                    <div className="dash-mini-kpi"><span>Earnings</span><strong>â‚±{(profile?.earnings || 4320).toLocaleString()}</strong></div>
+                    <div className="dash-mini-kpi"><span>Views</span><strong>{((profile?.totalViews || 38400)/1000).toFixed(1)}k</strong></div>
+                    <div className="dash-mini-kpi"><span>Vlogs</span><strong>{myVlogs.length || profile?.vlogCount || 48}</strong></div>
+                    <div className="dash-mini-kpi"><span>Avg rating</span><strong>{(profile?.avgRating || 4.8).toFixed(1)}</strong></div>
+                  </div>
+                </div>
+                <div className="dashboard-summary-title" style={{ fontSize:'22px', fontWeight:700, marginBottom:'3px' }}>
+                  Dashboard
+                </div>
+                <div className="dashboard-summary-subtitle" style={{ fontSize:'14px', color:'var(--color-text-secondary)', marginBottom:'20px' }}>Your profile, vlogs, and performance in one place</div>
                 <div className="kpig">
                   <div className="kp">
                     <div className="kpl">Earnings</div>
@@ -2076,8 +2416,28 @@ export default function Home() {
                     <div className="kpv">{myVlogs.length || profile?.vlogCount || 48}</div>
                     <div className="kpc dw" style={{ color:'var(--color-text-secondary)' }}>2 in review</div>
                   </div>
+                  <div className="kp">
+                    <div className="kpl">Followers</div>
+                    <div className="kpv">{((profile?.followers || 0)/1000).toFixed(1)}k</div>
+                    <div className="kpc up">Creator profile</div>
+                  </div>
+                  <div className="kp">
+                    <div className="kpl">Avg rating</div>
+                    <div className="kpv">{(profile?.avgRating || 4.8).toFixed(1)}</div>
+                    <div className="kpc up">Across vlogs</div>
+                  </div>
+                  <div className="kp">
+                    <div className="kpl">Base</div>
+                    <div className="kpv dash-kpv-text">{profile?.country || DEFAULT_COUNTRY}</div>
+                    <div className="kpc up">{profile?.travelStyle || 'Budget'} travel</div>
+                  </div>
+                  <div className="kp">
+                    <div className="kpl">Handle</div>
+                    <div className="kpv dash-kpv-text">@{profile?.handle || 'marisolroams'}</div>
+                    <div className="kpc up">{profile?.verified ? 'Verified' : 'Creator'}</div>
+                  </div>
                 </div>
-                <div style={{ marginBottom:'22px' }}>
+                <div className="dashboard-summary-chart" style={{ marginBottom:'22px' }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'11px' }}>
                     <span style={{ fontSize:'14px', fontWeight:600 }}>Monthly earnings</span>
                     <span style={{ fontSize:'12px', color:'var(--color-text-secondary)' }}>Oct: 86 unlocks</span>
@@ -2095,18 +2455,18 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <div style={{ marginBottom:'11px' }}>
+                <div className="dashboard-vlogs-title" style={{ marginBottom:'11px' }}>
                   <span style={{ fontSize:'14px', fontWeight:600 }}>My vlogs</span>
                 </div>
-                <div className="vl2">
+                <div className="gi-grid dash-vlog-grid">
                   {myVlogs.length === 0 ? (
-                    <div style={{ padding:'20px', textAlign:'center', color:'var(--color-text-secondary)', fontSize:'13px' }}>
-                      No vlogs yet. <span style={{ color:'var(--g)', cursor:'pointer', fontWeight:600 }} onClick={() => { setPostForm({ ...defaultPostForm }); setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' }); setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError(''); setVibeInput(''); setVibeFocused(false); setPostView('form'); go('post') }}>Post your first vlog →</span>
+                    <div className="dash-empty">
+                      No vlogs yet. <span style={{ color:'var(--g)', cursor:'pointer', fontWeight:600 }} onClick={() => { setPostForm({ ...defaultPostForm }); setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' }); setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError(''); setVibeInput(''); setVibeFocused(false); setPostView('form'); setEditingVlogId(null); go('post') }}>Post your first vlog →</span>
                     </div>
                   ) : myVlogs.map(v => (
                     <div
                       key={v.id}
-                      className={`vr2${selectedMyVlogId === v.id ? ' on' : ''}`}
+                      className={`gi-card${selectedMyVlogId === v.id ? ' on' : ''}`}
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
@@ -2127,12 +2487,20 @@ export default function Home() {
                         }
                       }}
                     >
-                      <div className={`vt2 ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}/>
-                      <div style={{ flex:1 }}>
-                        <div className="vn2">{v.title.length > 36 ? v.title.slice(0,36)+'…' : v.title}</div>
-                        <span className="vs2">{v.views >= 1000 ? `${(v.views/1000).toFixed(1)}k` : v.views} views · {v.credits > 0 ? `${v.credits} unlocks` : 'free vlog'}</span>
+                      <div className={`gi-thumb ${v.thumbnailColor}`}>
+                        <img src={coverForVlog(v)} alt={v.title}/>
+                        <div className="gi-thumb-play">
+                          <div className="gi-thumb-play-btn">
+                            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                          </div>
+                        </div>
+                        {v.credits > 0 ? <div className="gi-cred-badge">{v.credits} unlocks</div> : <div className="gi-cred-badge free">Free</div>}
                       </div>
-                      <span className="st sl3">Live</span>
+                      <div className="gi-title">{v.title}</div>
+                      <div className="gi-info">
+                        <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
+                        <div className="gi-info-handle">{v.views >= 1000 ? `${(v.views/1000).toFixed(1)}k` : v.views} views · {v.likes} likes</div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2263,7 +2631,7 @@ export default function Home() {
                               <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                               {vlog.reviews.length}
                             </button>
-                            <button className="gi-panel-btn gi-panel-btn-secondary" onClick={() => { setDashboardMode('edit'); setEditingVlogId(vlog.id) }}>
+                            <button className="gi-panel-btn gi-panel-btn-secondary" onClick={() => beginEditVlog(vlog)}>
                               <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                               Edit
                             </button>
@@ -2281,13 +2649,48 @@ export default function Home() {
                           )}
 
                           {/* Itinerary */}
-                          {unlocked && vlog.itinerary && vlog.itinerary.length > 0 && (
-                            <div style={{ marginTop:'16px' }}>
-                              <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>Itinerary</div>
+                          {vlog.itinerary && vlog.itinerary.length > 0 && (
+                            <div className="gi-panel-itinerary">
+                              <div className="gi-panel-section-title">Itinerary</div>
                               {vlog.itinerary.map(day => (
-                                <div key={day.id} style={{ padding:'10px', background:'var(--bg-secondary)', borderRadius:'6px', marginBottom:'8px', fontSize:'12px' }}>
-                                  <div style={{ fontWeight:600, marginBottom:'4px' }}>Day {day.day}: {day.activity}</div>
-                                  {day.cost && <div>💰 ₱{day.cost}</div>}
+                                <div key={day.id} className="gi-itinerary-card">
+                                  <div className="gi-itinerary-head">
+                                    <div className="gi-itinerary-day">Day {day.day}</div>
+                                    <div className="gi-itinerary-activity">{day.activity}</div>
+                                  </div>
+                                  {day.cost && <div className="gi-itinerary-detail">Estimated cost: PHP {day.cost.toLocaleString()}</div>}
+                                  {day.highlights && <div className="dashboard-day-detail"><strong>Highlights:</strong> {day.highlights}</div>}
+                                  {day.foodTips && <div className="dashboard-day-detail"><strong>Food tips:</strong> {day.foodTips}</div>}
+                                  {day.gettingThere && <div className="dashboard-day-detail"><strong>Getting around:</strong> {day.gettingThere}</div>}
+                                  {day.tips && <div className="dashboard-day-detail"><strong>Tips:</strong> {day.tips}</div>}
+                                  {(() => {
+                                    const dayMedia = mediaForDay(day)
+                                    if (!dayMedia.length) return null
+                                    return (
+                                      <>
+                                        <div className="detail-media-grid">
+                                          {dayMedia.map((item, mediaIndex) => (
+                                            <div
+                                              key={`${item.url}-${mediaIndex}`}
+                                              className="day-media-card"
+                                              role="button"
+                                              tabIndex={0}
+                                              onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)}
+                                              onKeyDown={event => {
+                                                if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)
+                                              }}
+                                            >
+                                              {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt={`Day ${day.day} media ${mediaIndex + 1}`} />}
+                                              <span className="day-media-card-overlay">View</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <button type="button" className="day-media-open compact" onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, 0)}>
+                                  View media ({dayMedia.length})
+                                        </button>
+                                      </>
+                                    )
+                                  })()}
                                 </div>
                               ))}
                             </div>
@@ -2318,60 +2721,6 @@ export default function Home() {
                   </>
                 )}
 
-                {/* EDIT MODE */}
-                {dashboardMode === 'edit' && editingVlogId && (
-                  <div style={{ padding:'20px', overflowY:'auto', height:'100%' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
-                      <div style={{ fontSize:'18px', fontWeight:700 }}>Edit vlog</div>
-                      <button className="gi-panel-close" onClick={() => { setDashboardMode('details'); setEditingVlogId(null) }}>×</button>
-                    </div>
-                    <div className="fg">
-                      <label>Title</label>
-                      <input type="text" className="fi" value={postForm.title} onChange={(e) => setPostForm({...postForm, title: e.target.value})} />
-                    </div>
-                    <div className="fg">
-                      <label>Description</label>
-                      <textarea className="fi" value={postForm.description} onChange={(e) => setPostForm({...postForm, description: e.target.value})} style={{ minHeight:'80px' }}/>
-                    </div>
-                    <div className="fg">
-                      <label>Locations</label>
-                      <input type="text" className="fi" value={postForm.cities} onChange={(e) => setPostForm({...postForm, cities: e.target.value})} />
-                    </div>
-                    <div className="fg">
-                      <label>Premium Credits</label>
-                      <input type="number" className="fi" value={postForm.credits} onChange={(e) => setPostForm({...postForm, credits: parseInt(e.target.value) || 0})} />
-                    </div>
-                    <div style={{ display:'flex', gap:'10px', marginTop:'20px' }}>
-                      <button className="nb" style={{ flex:1, padding:'10px' }} onClick={() => { setDashboardMode('details'); setEditingVlogId(null) }}>Cancel</button>
-                      <button className="nb" style={{ flex:1, padding:'10px', background:'var(--g)', color:'white' }} onClick={async () => {
-                        if (!editingVlogId) return
-                        try {
-                          const res = await fetch(`/api/vlogs/${editingVlogId}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              title: postForm.title,
-                              description: postForm.description,
-                              location: postForm.cities,
-                              credits: postForm.credits,
-                            }),
-                          })
-                          if (res.ok) {
-                            const updated = await res.json()
-                            setMyVlogs(myVlogs.map(v => v.id === editingVlogId ? updated : v))
-                            setVlog(updated)
-                            setDashboardMode('details')
-                            setEditingVlogId(null)
-                          }
-                        } catch (e) {
-                          console.error('Failed to update vlog')
-                        }
-                      }}>
-                        Save changes
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -2405,6 +2754,50 @@ export default function Home() {
                   {!readN.has(n.id) && n.id !== 'n5' && <div className="nd2"/>}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mediaModal && activeModalItem && (
+        <div className="media-modal" role="dialog" aria-modal="true" aria-label={mediaModal.title}>
+          <div className="media-modal-shell">
+            <div className="media-modal-head">
+              <div className="media-modal-title">{mediaModal.title}</div>
+              <button type="button" className="media-modal-close" aria-label="Close media carousel" onClick={() => setMediaModal(null)}>x</button>
+            </div>
+            <div className="media-modal-stage">
+              {mediaModal.items.length > 1 && (
+                <button type="button" className="media-modal-nav prev" aria-label="Previous media" onClick={() => shiftMediaModal(-1)}>
+                  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+              )}
+              {activeModalItem.type === 'video' ? (
+                <video src={activeModalItem.url} controls autoPlay playsInline />
+              ) : (
+                <img src={activeModalItem.url} alt={`${mediaModal.title} ${mediaModal.index + 1}`} />
+              )}
+              {mediaModal.items.length > 1 && (
+                <button type="button" className="media-modal-nav next" aria-label="Next media" onClick={() => shiftMediaModal(1)}>
+                  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              )}
+            </div>
+            <div className="media-modal-footer">
+              <div className="media-modal-count">{mediaModal.index + 1} / {mediaModal.items.length}</div>
+              <div className="media-modal-thumbs">
+                {mediaModal.items.map((item, index) => (
+                  <button
+                    key={`${item.url}-${index}`}
+                    type="button"
+                    className={`media-modal-thumb${index === mediaModal.index ? ' on' : ''}`}
+                    aria-label={`Show media ${index + 1}`}
+                    onClick={() => setMediaModal(current => current ? { ...current, index } : current)}
+                  >
+                    {item.type === 'video' ? <video src={item.url} muted playsInline /> : <img src={item.url} alt="" />}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

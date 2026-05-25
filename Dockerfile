@@ -29,11 +29,27 @@ ENV PORT=3000
 ENV NEXT_TELEMETRY_DISABLED=1
 # DATABASE_URL should be passed at runtime via environment variables
 
+# Copy standalone build
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+
+# Copy Prisma files and seed script
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
+
+# Copy seed dependencies
+COPY --from=deps /app/node_modules/tsx ./node_modules/tsx
+COPY --from=deps /app/node_modules/esbuild ./node_modules/esbuild
+COPY --from=builder /app/src/lib/travel-options.ts ./src/lib/travel-options.ts
+
+# Copy entrypoint script
 COPY --chmod=755 entrypoint.sh ./entrypoint.sh
+
+# Create uploads directory
 RUN mkdir -p ./public/uploads
 
 EXPOSE 3000

@@ -161,6 +161,29 @@ Centralized notification management.
 
 ---
 
+### 6. **TourMe.tsx** - Interactive World Tour
+Map-first discovery modal for destination hopping.
+
+**Features:**
+- Animated world-tour intro with live destination pins
+- Ranks destinations from live vlog views, likes, and trending state
+- Switches into a real map-tile view for the selected destination
+- Shows roaming avatar, next/previous destination controls, and itinerary clips
+- Fetches the selected vlog detail from `/api/vlogs/[id]`
+
+**Key State:**
+- `stage` - World intro or selected place view
+- `vlogId` - Selected destination vlog
+- `detail` - Loaded vlog detail with itinerary days
+- `clipId` - Selected itinerary day/clip
+
+**Key Methods:**
+- `loadDetail()` - Fetch selected vlog itinerary
+- `selectDestination()` - Switch map and clips to a destination
+- `moveDestination()` - Navigate previous/next destination
+
+---
+
 ## Integration with Main Page
 
 To integrate these modules into your main page (`src/app/page.tsx`), use them like this:
