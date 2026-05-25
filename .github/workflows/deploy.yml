@@ -9,10 +9,68 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      EC2_SSH_PORT: ${{ secrets.EC2_SSH_PORT || '22' }}
+      EC2_SECURITY_GROUP_ID: ${{ secrets.EC2_SECURITY_GROUP_ID }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID_FOR_DEPLOY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY_FOR_DEPLOY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Detect GitHub runner public IP
+        id: runner-ip
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNNER_IPV4="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
+          if [ -z "$RUNNER_IPV4" ]; then
+            echo "Could not detect GitHub runner public IP."
+            exit 1
+          fi
+          echo "ipv4=$RUNNER_IPV4" >> "$GITHUB_OUTPUT"
+          echo "Runner public IPv4: $RUNNER_IPV4"
+
+      - name: Configure AWS credentials for temporary SSH access
+        if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Allow this GitHub runner to SSH into EC2
+        if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CIDR="${{ steps.runner-ip.outputs.ipv4 }}/32"
+          echo "Authorizing temporary SSH ingress from $CIDR to security group $EC2_SECURITY_GROUP_ID on port $EC2_SSH_PORT..."
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$EC2_SECURITY_GROUP_ID" \
+            --ip-permissions "IpProtocol=tcp,FromPort=$EC2_SSH_PORT,ToPort=$EC2_SSH_PORT,IpRanges=[{CidrIp=$CIDR,Description='GitHub Actions deploy ${GITHUB_RUN_ID}'}]" \
+          || echo "SSH ingress rule may already exist; continuing."
+
+      - name: Verify EC2 SSH reachability
+        shell: bash
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          echo "Checking SSH reachability to EC2 on port $EC2_SSH_PORT..."
+          for attempt in $(seq 1 12); do
+            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$EC2_HOST/$EC2_SSH_PORT" 2>/dev/null; then
+              echo "EC2 SSH port is reachable."
+              exit 0
+            fi
+            echo "SSH is not reachable yet (attempt $attempt/12). Waiting 10 seconds..."
+            sleep 10
+          done
+          echo "Could not reach EC2 over SSH."
+          echo "Check that EC2_HOST is the public IPv4/DNS, the instance is running, and security group inbound allows TCP $EC2_SSH_PORT from ${{ steps.runner-ip.outputs.ipv4 }}/32."
+          exit 1
 
       - name: Copy project to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -20,6 +78,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ env.EC2_SSH_PORT }}
+          timeout: 120s
+          command_timeout: 15m
           source: ".dockerignore,Dockerfile,entrypoint.sh,next.config.js,package.json,package-lock.json,prisma,public,src,tsconfig.json,postcss.config.js,tailwind.config.js,next-env.d.ts"
           target: "/home/ec2-user/tourista"
           rm: true
@@ -33,6 +94,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ env.EC2_SSH_PORT }}
           command_timeout: 60m
           script_stop: true
           envs: DATABASE_URL
@@ -90,3 +152,17 @@ jobs:
 
             echo "Deployment complete!"
             docker ps --filter name=tourista-app
+
+      - name: Remove temporary GitHub runner SSH access
+        if: ${{ always() && env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CIDR="${{ steps.runner-ip.outputs.ipv4 }}/32"
+          echo "Revoking temporary SSH ingress from $CIDR..."
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$EC2_SECURITY_GROUP_ID" \
+            --protocol tcp \
+            --port "$EC2_SSH_PORT" \
+            --cidr "$CIDR" \
+          || echo "Temporary SSH ingress rule was already absent."
