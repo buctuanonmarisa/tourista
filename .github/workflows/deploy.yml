@@ -9,10 +9,100 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      EC2_SSH_PORT: ${{ secrets.EC2_SSH_PORT || '22' }}
+      EC2_SECURITY_GROUP_ID: ${{ secrets.EC2_SECURITY_GROUP_ID }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID_FOR_DEPLOY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY_FOR_DEPLOY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Detect GitHub runner public IP
+        id: runner-ip
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNNER_IPV4="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
+          if [ -z "$RUNNER_IPV4" ]; then
+            echo "Could not detect GitHub runner public IP."
+            exit 1
+          fi
+          echo "ipv4=$RUNNER_IPV4" >> "$GITHUB_OUTPUT"
+          echo "Runner public IPv4: $RUNNER_IPV4"
+
+      - name: Validate AWS deploy secrets
+        if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' || env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' || env.AWS_REGION != '' || env.EC2_SECURITY_GROUP_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AWS_ACCESS_KEY_ID_FOR_DEPLOY AWS_SECRET_ACCESS_KEY_FOR_DEPLOY AWS_REGION EC2_SECURITY_GROUP_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "$name is missing. Either add all AWS deploy secrets, or remove all of them and manage SSH ingress manually."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          case "$AWS_REGION" in
+            *[0-9][a-z])
+              echo "AWS_REGION looks like an Availability Zone, not a region. Use the region without the final letter, for example ap-southeast-2 instead of ap-southeast-2a."
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "$AWS_REGION" | grep -Eq '^[a-z]{2}-[a-z]+-[0-9]+$'; then
+            echo "AWS_REGION is invalid. Example: ap-southeast-2"
+            exit 1
+          fi
+          if ! printf '%s' "$EC2_SECURITY_GROUP_ID" | grep -Eq '^sg-[a-f0-9]+$'; then
+            echo "EC2_SECURITY_GROUP_ID is invalid. Example: sg-0d91be9e06a5fed25"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials for temporary SSH access
+        if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Allow this GitHub runner to SSH into EC2
+        id: ssh-ingress
+        if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CIDR="${{ steps.runner-ip.outputs.ipv4 }}/32"
+          echo "Authorizing temporary SSH ingress from $CIDR to security group $EC2_SECURITY_GROUP_ID on port $EC2_SSH_PORT..."
+          aws ec2 authorize-security-group-ingress \
+            --group-id "$EC2_SECURITY_GROUP_ID" \
+            --ip-permissions "IpProtocol=tcp,FromPort=$EC2_SSH_PORT,ToPort=$EC2_SSH_PORT,IpRanges=[{CidrIp=$CIDR,Description='GitHub Actions deploy ${GITHUB_RUN_ID}'}]" \
+          || echo "SSH ingress rule may already exist; continuing."
+          echo "added=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify EC2 SSH reachability
+        shell: bash
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          echo "Checking SSH reachability to EC2 on port $EC2_SSH_PORT..."
+          for attempt in $(seq 1 12); do
+            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$EC2_HOST/$EC2_SSH_PORT" 2>/dev/null; then
+              echo "EC2 SSH port is reachable."
+              exit 0
+            fi
+            echo "SSH is not reachable yet (attempt $attempt/12). Waiting 10 seconds..."
+            sleep 10
+          done
+          echo "Could not reach EC2 over SSH."
+          echo "Check that EC2_HOST is the public IPv4/DNS, the instance is running, and security group inbound allows TCP $EC2_SSH_PORT from ${{ steps.runner-ip.outputs.ipv4 }}/32."
+          exit 1
 
       - name: Copy project to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -20,6 +110,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ env.EC2_SSH_PORT }}
+          timeout: 120s
+          command_timeout: 15m
           source: ".dockerignore,Dockerfile,entrypoint.sh,next.config.js,package.json,package-lock.json,prisma,public,src,tsconfig.json,postcss.config.js,tailwind.config.js,next-env.d.ts"
           target: "/home/ec2-user/tourista"
           rm: true
@@ -33,6 +126,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ env.EC2_SSH_PORT }}
           command_timeout: 60m
           script_stop: true
           envs: DATABASE_URL
@@ -56,14 +150,26 @@ jobs:
               exit 1
             fi
 
-            # Build with cache for faster deploys.
-            docker build --progress=plain -t ec2-next:latest -f Dockerfile .
+            # Enable BuildKit for better caching and performance
+            export DOCKER_BUILDKIT=1
+
+            # Build with BuildKit cache and optimizations
+            echo "Building Docker image with BuildKit..."
+            docker build \
+              --progress=plain \
+              --cache-from ec2-next:latest \
+              --build-arg BUILDKIT_INLINE_CACHE=1 \
+              -t ec2-next:latest \
+              -f Dockerfile \
+              .
 
             # Stop and remove old container only after the new image builds.
+            echo "Stopping old container..."
             docker ps -q --filter publish=80 | xargs -r docker rm -f
             docker rm -f tourista-app || true
 
             # Run new container
+            echo "Starting new container..."
             docker run -d \
               --name tourista-app \
               --restart unless-stopped \
@@ -71,5 +177,24 @@ jobs:
               --env-file "$REMOTE_ENV_FILE" \
               ec2-next:latest
 
-            # Clean up old images
+            # Clean up old images (keep last 2 for rollback)
+            echo "Cleaning up old images..."
+            docker images | grep ec2-next | tail -n +3 | awk '{print $3}' | xargs -r docker rmi -f || true
             docker image prune -f
+
+            echo "Deployment complete!"
+            docker ps --filter name=tourista-app
+
+      - name: Remove temporary GitHub runner SSH access
+        if: ${{ always() && steps.ssh-ingress.outputs.added == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CIDR="${{ steps.runner-ip.outputs.ipv4 }}/32"
+          echo "Revoking temporary SSH ingress from $CIDR..."
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$EC2_SECURITY_GROUP_ID" \
+            --protocol tcp \
+            --port "$EC2_SSH_PORT" \
+            --cidr "$CIDR" \
+          || echo "Temporary SSH ingress rule was already absent."
