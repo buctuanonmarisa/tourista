@@ -83,6 +83,9 @@ export function getEmbedUrl(url: string): string | null {
 /**
  * Calculate credits from itinerary costs
  */
+const CREDIT_PESO_RATE = 5
+const RECOMMENDED_CREDIT_RATE = 0.01
+
 export function calculateCredits(costs: string[]): number {
   const total = costs.reduce((sum, cost) => {
     if (!cost.trim()) return sum
@@ -91,15 +94,15 @@ export function calculateCredits(costs: string[]): number {
     return sum + num
   }, 0)
 
-  return Math.ceil(total / 75)
+  return total > 0 ? Math.ceil((total * RECOMMENDED_CREDIT_RATE) / CREDIT_PESO_RATE) : 0
 }
 
 /**
  * Calculate estimated earnings
  */
 export function calculateEarnings(credits: number, unlocks: number = 50): number {
-  // ₱10 per credit, 80% to creator
-  return credits * 10 * 0.8 * unlocks
+  // 1 credit is PHP 5; creator receives 80%.
+  return credits * CREDIT_PESO_RATE * 0.8 * unlocks
 }
 
 /**

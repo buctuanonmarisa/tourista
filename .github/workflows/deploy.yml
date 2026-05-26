@@ -33,6 +33,36 @@ jobs:
           echo "ipv4=$RUNNER_IPV4" >> "$GITHUB_OUTPUT"
           echo "Runner public IPv4: $RUNNER_IPV4"
 
+      - name: Validate AWS deploy secrets
+        if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' || env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' || env.AWS_REGION != '' || env.EC2_SECURITY_GROUP_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AWS_ACCESS_KEY_ID_FOR_DEPLOY AWS_SECRET_ACCESS_KEY_FOR_DEPLOY AWS_REGION EC2_SECURITY_GROUP_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "$name is missing. Either add all AWS deploy secrets, or remove all of them and manage SSH ingress manually."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          case "$AWS_REGION" in
+            *[0-9][a-z])
+              echo "AWS_REGION looks like an Availability Zone, not a region. Use the region without the final letter, for example ap-southeast-2 instead of ap-southeast-2a."
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "$AWS_REGION" | grep -Eq '^[a-z]{2}-[a-z]+-[0-9]+$'; then
+            echo "AWS_REGION is invalid. Example: ap-southeast-2"
+            exit 1
+          fi
+          if ! printf '%s' "$EC2_SECURITY_GROUP_ID" | grep -Eq '^sg-[a-f0-9]+$'; then
+            echo "EC2_SECURITY_GROUP_ID is invalid. Example: sg-0d91be9e06a5fed25"
+            exit 1
+          fi
+
       - name: Configure AWS credentials for temporary SSH access
         if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
         uses: aws-actions/configure-aws-credentials@v4
@@ -42,6 +72,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Allow this GitHub runner to SSH into EC2
+        id: ssh-ingress
         if: ${{ env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
         shell: bash
         run: |
@@ -52,6 +83,7 @@ jobs:
             --group-id "$EC2_SECURITY_GROUP_ID" \
             --ip-permissions "IpProtocol=tcp,FromPort=$EC2_SSH_PORT,ToPort=$EC2_SSH_PORT,IpRanges=[{CidrIp=$CIDR,Description='GitHub Actions deploy ${GITHUB_RUN_ID}'}]" \
           || echo "SSH ingress rule may already exist; continuing."
+          echo "added=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify EC2 SSH reachability
         shell: bash
@@ -154,7 +186,7 @@ jobs:
             docker ps --filter name=tourista-app
 
       - name: Remove temporary GitHub runner SSH access
-        if: ${{ always() && env.AWS_ACCESS_KEY_ID_FOR_DEPLOY != '' && env.AWS_SECRET_ACCESS_KEY_FOR_DEPLOY != '' && env.AWS_REGION != '' && env.EC2_SECURITY_GROUP_ID != '' }}
+        if: ${{ always() && steps.ssh-ingress.outputs.added == 'true' }}
         shell: bash
         run: |
           set -euo pipefail

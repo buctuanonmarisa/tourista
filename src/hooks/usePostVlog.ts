@@ -49,6 +49,11 @@ const defaultItinDays: ItineraryFormDay[] = [
   { day: 3, activity: '', cost: '', locked: true, expanded: false },
 ]
 
+const CREDIT_PESO_RATE = 5
+const RECOMMENDED_CREDIT_RATE = 0.01
+const recommendedCreditsForCost = (cost: number) =>
+  cost > 0 ? Math.ceil((cost * RECOMMENDED_CREDIT_RATE) / CREDIT_PESO_RATE) : 0
+
 export function usePostVlog() {
   const [postStep, setPostStep] = useState(1)
   const [postForm, setPostForm] = useState(defaultPostForm)
@@ -152,14 +157,13 @@ export function usePostVlog() {
           d.tips?.trim()
       )
 
-      const calculatedCredits = Math.ceil(
-        filledDays.reduce((sum, d) => {
-          if (!d.cost.trim()) return sum
-          const cleaned = d.cost.replace(/[₱$,\s]/g, '')
-          const num = parseInt(cleaned) || 0
-          return sum + num
-        }, 0) / 75
-      )
+      const totalDayCost = filledDays.reduce((sum, d) => {
+        if (!d.cost.trim()) return sum
+        const cleaned = d.cost.replace(/[₱$,\s]/g, '')
+        const num = parseInt(cleaned) || 0
+        return sum + num
+      }, 0)
+      const calculatedCredits = recommendedCreditsForCost(totalDayCost)
 
       const res = await fetch('/api/vlogs', {
         method: 'POST',

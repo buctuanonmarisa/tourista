@@ -36,6 +36,7 @@ interface VlogDetail extends VlogCard {
 interface UserProfile {
   id: string; handle: string; name: string; bio?: string | null; tagline?: string | null
   initials: string; avatarColor: string; country?: string | null; travelStyle?: string | null
+  avatarImage?: string | null; coverImage?: string | null
   verified: boolean; followers: number; vlogCount: number; avgRating: number
   totalViews: number; credits: number; earnings: number
   youtubeUrl?: string | null; instagramUrl?: string | null; tiktokUrl?: string | null
@@ -58,13 +59,21 @@ interface SavedDraft {
   data: { videoUrl: string; altLinks: { fb: string; tt: string; ig: string }; postForm: typeof defaultPostForm; itinDays: ItineraryFormDay[]; postStep: number }
 }
 const defaultPostForm = { title: '', description: '', country: DEFAULT_COUNTRY, cities: '', vibe: '', credits: 2, coverImage: '', cost: '', duration: '' }
-const CREDIT_PESO_RATE = 20
+const CREDIT_PESO_RATE = 5
+const RECOMMENDED_CREDIT_RATE = 0.01
+const recommendedCreditsForCost = (cost: number) =>
+  cost > 0 ? Math.ceil((cost * RECOMMENDED_CREDIT_RATE) / CREDIT_PESO_RATE) : 0
+const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const defaultItinDays: ItineraryFormDay[] = [
   { day: 1, activity: '', cost: '', locked: false, expanded: false },
   { day: 2, activity: '', cost: '', locked: false, expanded: false },
   { day: 3, activity: '', cost: '', locked: true, expanded: false },
 ]
 const SHORT_CLIP_MAX_SECONDS = 60
+const stripTemporaryUploadUrls = <T extends { coverImage?: string }>(form: T) => ({
+  ...form,
+  coverImage: form.coverImage?.startsWith('blob:') ? '' : form.coverImage || '',
+})
 
 const stableImageLock = (value: string) =>
   value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
@@ -214,6 +223,7 @@ export default function Home() {
   const [pForm, setPForm] = useState({
     name: '', tagline: '', bio: '', country: DEFAULT_COUNTRY,
     travelStyle: 'Budget', youtubeUrl: '', instagramUrl: '', tiktokUrl: '',
+    avatarImage: '', coverImage: '',
   })
 
   /* ─── Notifications ─── */
@@ -267,6 +277,7 @@ export default function Home() {
         name: d.name || '', tagline: d.tagline || '', bio: d.bio || '',
         country: d.country || DEFAULT_COUNTRY, travelStyle: d.travelStyle || 'Budget',
         youtubeUrl: d.youtubeUrl || '', instagramUrl: d.instagramUrl || '', tiktokUrl: d.tiktokUrl || '',
+        avatarImage: d.avatarImage || '', coverImage: d.coverImage || '',
       })
     } catch { /* ignore */ }
   }, [])
@@ -471,7 +482,7 @@ export default function Home() {
         setItinDays(finalDays)
         setPostForm(f => ({
           ...f,
-          credits: generatedTotalCost > 0 ? Math.ceil(generatedTotalCost / CREDIT_PESO_RATE) : f.credits,
+          credits: generatedTotalCost > 0 ? recommendedCreditsForCost(generatedTotalCost) : f.credits,
         }))
       }
 
@@ -896,11 +907,13 @@ export default function Home() {
       setSelectedMyVlogId(created.id)
       setDashboardMode('details')
       setAutoplayVlogId(created.id)
+      setVlog(null)
       setVlogLoading(true)
       setMyVlogs(current => [created, ...current.filter(v => v.id !== created.id)])
       fetchVlogs()
       fetchMyVlogs()
-      go('dashboard')
+      setPrev(page)
+      setPage('dashboard')
       try {
         const detailRes = await fetch(`/api/vlogs/${created.id}`)
         if (detailRes.ok) {
@@ -927,11 +940,16 @@ export default function Home() {
   const saveDraft = () => {
     try {
       const existing: SavedDraft[] = JSON.parse(localStorage.getItem('tourista_drafts') || '[]')
+      const draftPostForm = stripTemporaryUploadUrls(postForm)
+      const draftDays = itinDays.map(day => ({
+        ...day,
+        media: day.media?.filter(item => !item.url.startsWith('blob:')) || [],
+      }))
       const newDraft: SavedDraft = {
         id: Date.now().toString(36),
         savedAt: Date.now(),
-        title: postForm.title.trim() || 'Untitled draft',
-        data: { videoUrl, altLinks, postForm, itinDays, postStep },
+        title: draftPostForm.title.trim() || 'Untitled draft',
+        data: { videoUrl, altLinks, postForm: draftPostForm, itinDays: draftDays, postStep },
       }
       const updated = [newDraft, ...existing].slice(0, 10)
       localStorage.setItem('tourista_drafts', JSON.stringify(updated))
@@ -941,16 +959,31 @@ export default function Home() {
   }
 
   const loadDraftById = (id: string) => {
-    const draft = drafts.find(d => d.id === id)
-    if (!draft) return
-    const d = draft.data
-    setVideoUrl(d.videoUrl || '')
-    setAltLinks(d.altLinks || { fb: '', tt: '', ig: '' })
-    setPostForm(d.postForm || { ...defaultPostForm })
-    setItinDays(d.itinDays || defaultItinDays.map(x => ({ ...x })))
-    setPostStep(d.postStep || 1)
-    setPublishError('')
-    setPostView('form')
+    try {
+      const draft = drafts.find(d => d.id === id)
+      if (!draft?.data) return
+      const d = draft.data
+      setVideoUrl(d.videoUrl || '')
+      setAltLinks(d.altLinks || { fb: '', tt: '', ig: '' })
+      setPostForm({ ...defaultPostForm, ...stripTemporaryUploadUrls(d.postForm || { ...defaultPostForm }) })
+      setItinDays(Array.isArray(d.itinDays) && d.itinDays.length
+        ? d.itinDays.map((day, index) => ({
+          ...defaultItinDays[index],
+          ...day,
+          day: Number(day.day) || index + 1,
+          cost: String(day.cost || ''),
+          media: day.media?.filter(item => item.url && !item.url.startsWith('blob:')) || [],
+          expanded: Boolean(day.expanded),
+        }))
+        : defaultItinDays.map(x => ({ ...x })))
+      setPostStep(clampNumber(Number(d.postStep) || 1, 1, 3))
+      setEditingVlogId(null)
+      setCreditsReviewed(false)
+      setPublishError('')
+      setPostView('form')
+    } catch {
+      setPublishError('This draft could not be loaded. It may be from an older version of Tourista.')
+    }
   }
 
   const deleteDraft = (id: string) => {
@@ -984,10 +1017,15 @@ export default function Home() {
      Profile edit
   ══════════════════════════════════════════ */
   const saveProfile = async () => {
-    await fetch('/api/profile', {
+    const response = await fetch('/api/profile', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(pForm),
     })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}))
+      window.alert(error.error || 'Failed to save profile. Please try again.')
+      return
+    }
     await fetchProfile(); go('dashboard')
   }
 
@@ -1016,6 +1054,20 @@ export default function Home() {
       setPublishError(e instanceof Error ? e.message : 'Cover photo upload failed. Please try again.')
     } finally {
       setCoverUploading(false)
+    }
+  }
+
+  const handleProfileImageUpload = async (file: File, field: 'avatarImage' | 'coverImage') => {
+    const localUrl = URL.createObjectURL(file)
+    setPForm(p => ({ ...p, [field]: localUrl }))
+    try {
+      const url = await handleUpload(file)
+      setPForm(p => ({ ...p, [field]: url }))
+      setTimeout(() => URL.revokeObjectURL(localUrl), 5000)
+    } catch (e) {
+      setPForm(p => ({ ...p, [field]: profile?.[field] || '' }))
+      URL.revokeObjectURL(localUrl)
+      window.alert(e instanceof Error ? e.message : 'Profile image upload failed. Please try again.')
     }
   }
 
@@ -1060,8 +1112,7 @@ export default function Home() {
       return sum + num
     }, 0)
 
-    // 1 credit per PHP 20.
-    return totalDayCost > 0 ? Math.ceil(totalDayCost / CREDIT_PESO_RATE) : 0
+    return recommendedCreditsForCost(totalDayCost)
   }
 
   /* ══════════════════════════════════════════
@@ -1162,6 +1213,17 @@ export default function Home() {
       {page === 'browse' && (
         <div className="filterbar">
           <div className="filterbar-inner">
+            <div className="fb-tabs">
+              <button className={`fb-tab${activeFilterTab === 'vibe' ? ' on' : ''}`} onClick={() => setActiveFilterTab('vibe')}>
+                Vibe {selectedVibes.length > 0 && <span className="fb-tab-count">{selectedVibes.length}</span>}
+              </button>
+              <button className={`fb-tab${activeFilterTab === 'country' ? ' on' : ''}`} onClick={() => setActiveFilterTab('country')}>
+                Country {selectedCountries.length > 0 && <span className="fb-tab-count">{selectedCountries.length}</span>}
+              </button>
+              <button className={`fb-tab${activeFilterTab === 'budget' ? ' on' : ''}`} onClick={() => setActiveFilterTab('budget')}>
+                Budget {budget && <span className="fb-tab-count">{budget}</span>}
+              </button>
+            </div>
             <div className="access-filter" aria-label="Unlock filter">
               {[
                 { value: 'all', label: 'All vlogs' },
@@ -1177,17 +1239,6 @@ export default function Home() {
                   {option.label}
                 </button>
               ))}
-            </div>
-            <div className="fb-tabs">
-              <button className={`fb-tab${activeFilterTab === 'vibe' ? ' on' : ''}`} onClick={() => setActiveFilterTab('vibe')}>
-                Vibe {selectedVibes.length > 0 && <span className="fb-tab-count">{selectedVibes.length}</span>}
-              </button>
-              <button className={`fb-tab${activeFilterTab === 'country' ? ' on' : ''}`} onClick={() => setActiveFilterTab('country')}>
-                Country {selectedCountries.length > 0 && <span className="fb-tab-count">{selectedCountries.length}</span>}
-              </button>
-              <button className={`fb-tab${activeFilterTab === 'budget' ? ' on' : ''}`} onClick={() => setActiveFilterTab('budget')}>
-                Budget {budget && <span className="fb-tab-count">{budget}</span>}
-              </button>
             </div>
           </div>
 
@@ -1682,11 +1733,11 @@ export default function Home() {
         <div className="page on">
           <div className="w" style={{ paddingTop:0 }}>
             <div style={{ border:'1px solid var(--color-border-tertiary)', borderRadius:'14px', overflow:'hidden', marginTop:'20px' }}>
-              <div className="pcv" style={{ background:'linear-gradient(135deg,var(--g1),var(--g))' }}>
+              <div className="pcv" style={profile?.coverImage ? { backgroundImage: `url('${profile.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background:'linear-gradient(135deg,var(--g1),var(--g))' }}>
                 <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px', opacity:.08 }}>🌿</div>
               </div>
               <div className="pbar">
-                <div className="pavw"><div className="pavi">{profile?.initials || 'M'}</div></div>
+                <div className="pavw"><div className="pavi">{profile?.avatarImage ? <img src={profile.avatarImage} alt={profile.name || 'Profile'} /> : profile?.initials || 'M'}</div></div>
                 <div style={{ flex:1, paddingBottom:'2px' }}>
                   <div className="pn">{profile?.name || 'MarisolRoams'}</div>
                   <div className="ps">
@@ -1780,16 +1831,16 @@ export default function Home() {
             <div style={{ fontSize:'13.5px', color:'var(--color-text-secondary)', marginBottom:'20px' }}>Update how tourists and vloggers see you</div>
 
             <input ref={coverRef} type="file" accept="image/*" style={{ display:'none' }}
-              onChange={async e => { if (e.target.files?.[0]) await handleUpload(e.target.files[0]) }}/>
-            <div className="ecv" onClick={() => coverRef.current?.click()}>
+              onChange={async e => { if (e.target.files?.[0]) await handleProfileImageUpload(e.target.files[0], 'coverImage'); e.currentTarget.value = '' }}/>
+            <div className="ecv" onClick={() => coverRef.current?.click()} style={pForm.coverImage ? { backgroundImage: `url('${pForm.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
               <div className="ecvb">Change cover photo</div>
             </div>
 
             <input ref={avatarRef} type="file" accept="image/*" style={{ display:'none' }}
-              onChange={async e => { if (e.target.files?.[0]) await handleUpload(e.target.files[0]) }}/>
+              onChange={async e => { if (e.target.files?.[0]) await handleProfileImageUpload(e.target.files[0], 'avatarImage'); e.currentTarget.value = '' }}/>
             <div className="eav">
               <div className="efav" onClick={() => avatarRef.current?.click()}>
-                {profile?.initials || 'M'}
+                {pForm.avatarImage ? <img src={pForm.avatarImage} alt="Profile preview" /> : profile?.initials || 'M'}
                 <div className="efavc">+</div>
               </div>
               <div style={{ fontSize:'13px', color:'var(--color-text-secondary)' }}>Tap to change profile photo</div>
@@ -2434,6 +2485,7 @@ export default function Home() {
                       <strong style={{ color: 'var(--color-text-primary)' }}>Recommended value:</strong>
                       <div style={{ marginTop: '8px', fontSize: '12px', lineHeight: '1.6' }}>
                         Total itinerary cost: <strong>₱{totalDayCost.toLocaleString()}</strong><br/>
+                        1% creator value: <strong>₱{Math.ceil(totalDayCost * RECOMMENDED_CREDIT_RATE).toLocaleString()}</strong><br/>
                         ÷ ₱{CREDIT_PESO_RATE} per credit = <strong>{calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}</strong>
                       </div>
                     </div>
@@ -2551,7 +2603,7 @@ export default function Home() {
           <div className={`gi-layout dashboard-layout${selectedMyVlogId || dashboardMode !== 'list' ? ' with-panel' : ''}`}>
             <div className="dash-compact-summary">
               <div className="dash-compact-profile">
-                <div className="dash-compact-avatar">{profile?.initials || 'M'}</div>
+                <div className="dash-compact-avatar">{profile?.avatarImage ? <img src={profile.avatarImage} alt={profile.name || 'Profile'} /> : profile?.initials || 'M'}</div>
                 <div className="dash-compact-copy">
                   <div className="dash-compact-name">{profile?.name || 'MarisolRoams'}</div>
                   <div className="dash-compact-meta">@{profile?.handle || 'marisolroams'} Â· {profile?.country || DEFAULT_COUNTRY}</div>
@@ -2573,11 +2625,11 @@ export default function Home() {
             <div className="gi-panel-left" style={{ padding:'20px' }}>
               <div className="dashboard-left-content" style={{ width:'100%' }}>
                 <div className="dash-profile">
-                  <div className="dash-cover">
+                  <div className="dash-cover" style={profile?.coverImage ? { backgroundImage: `url('${profile.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
                     <div className="dash-cover-mark">Tourista</div>
                   </div>
                   <div className="dash-profile-body">
-                    <div className="dash-avatar">{profile?.initials || 'M'}</div>
+                    <div className="dash-avatar">{profile?.avatarImage ? <img src={profile.avatarImage} alt={profile.name || 'Profile'} /> : profile?.initials || 'M'}</div>
                     <div className="dash-profile-main">
                       <div className="dash-profile-row">
                         <div className="emoji-field">
@@ -2604,7 +2656,7 @@ export default function Home() {
                 </div>
                 <div className="dash-compact-summary">
                   <div className="dash-compact-profile">
-                    <div className="dash-compact-avatar">{profile?.initials || 'M'}</div>
+                    <div className="dash-compact-avatar">{profile?.avatarImage ? <img src={profile.avatarImage} alt={profile.name || 'Profile'} /> : profile?.initials || 'M'}</div>
                     <div className="dash-compact-copy">
                       <div className="dash-compact-name">{profile?.name || 'MarisolRoams'}</div>
                       <div className="dash-compact-meta">@{profile?.handle || 'marisolroams'} Â· {profile?.country || DEFAULT_COUNTRY}</div>

@@ -20,6 +20,8 @@ export async function PUT(req: NextRequest) {
       name: body.name || user.name,
       tagline: body.tagline ?? user.tagline,
       bio: body.bio ?? user.bio,
+      avatarImage: body.avatarImage ?? user.avatarImage,
+      coverImage: body.coverImage ?? user.coverImage,
       country: body.country ?? user.country,
       travelStyle: body.travelStyle ?? user.travelStyle,
       youtubeUrl: body.youtubeUrl ?? user.youtubeUrl,

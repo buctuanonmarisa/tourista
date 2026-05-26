@@ -1,0 +1,2 @@
+ALTER TABLE "User" ADD COLUMN "avatarImage" TEXT;
+ALTER TABLE "User" ADD COLUMN "coverImage" TEXT;

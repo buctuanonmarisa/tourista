@@ -29,6 +29,18 @@ const buildItineraryMedia = (day: {
   return media.length ? media : fallback
 }
 
+const parseItineraryMedia = (day: { clipDescription?: string | null; mediaUrl?: string | null; mediaType?: string | null }) => {
+  try {
+    const parsed = day.clipDescription ? JSON.parse(day.clipDescription) : null
+    if (Array.isArray(parsed?.media)) {
+      return parsed.media.filter((item: { url?: string; type?: string }) => item.url)
+    }
+  } catch {
+    /* fall back to legacy media fields */
+  }
+  return day.mediaUrl ? [{ url: day.mediaUrl, type: day.mediaType === 'video' ? 'video' : 'image' }] : []
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const vlog = await prisma.vlog.findUnique({
     where: { id: params.id },
@@ -53,7 +65,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   await prisma.vlog.update({ where: { id: params.id }, data: { views: { increment: 1 } } })
 
-  return NextResponse.json({ ...vlog, coverImage: coverPhotoFor(vlog) })
+  return NextResponse.json({
+    ...vlog,
+    coverImage: coverPhotoFor(vlog),
+    itinerary: vlog.itinerary.map(day => ({ ...day, media: parseItineraryMedia(day) })),
+  })
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

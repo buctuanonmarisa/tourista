@@ -59,6 +59,11 @@ const defaultItinDays: ItineraryFormDay[] = [
   { day: 3, activity: '', cost: '', locked: true, expanded: false },
 ]
 
+const CREDIT_PESO_RATE = 5
+const RECOMMENDED_CREDIT_RATE = 0.01
+const recommendedCreditsForCost = (cost: number) =>
+  cost > 0 ? Math.ceil((cost * RECOMMENDED_CREDIT_RATE) / CREDIT_PESO_RATE) : 0
+
 const VIBES = FALLBACK_VIBES
 
 export default function PostVlog({ onPublishSuccess }: PostVlogProps) {
@@ -160,14 +165,13 @@ export default function PostVlog({ onPublishSuccess }: PostVlogProps) {
           d.tips?.trim()
       )
 
-      const calculatedCredits = Math.ceil(
-        filledDays.reduce((sum, d) => {
-          if (!d.cost.trim()) return sum
-          const cleaned = d.cost.replace(/[₱$,\s]/g, '')
-          const num = parseInt(cleaned) || 0
-          return sum + num
-        }, 0) / 75
-      )
+      const totalDayCost = filledDays.reduce((sum, d) => {
+        if (!d.cost.trim()) return sum
+        const cleaned = d.cost.replace(/[₱$,\s]/g, '')
+        const num = parseInt(cleaned) || 0
+        return sum + num
+      }, 0)
+      const calculatedCredits = recommendedCreditsForCost(totalDayCost)
 
       const res = await fetch('/api/vlogs', {
         method: 'POST',
@@ -348,7 +352,7 @@ function Step3Credits({ itinDays, creditsReviewed, setCreditsReviewed }: any) {
     return sum + num
   }, 0)
 
-  const calculatedCredits = Math.ceil(totalDayCost / 75)
+  const calculatedCredits = recommendedCreditsForCost(totalDayCost)
 
   return (
     <div>
@@ -360,13 +364,15 @@ function Step3Credits({ itinDays, creditsReviewed, setCreditsReviewed }: any) {
           <div style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
             Total itinerary cost: ₱{totalDayCost.toLocaleString()}
             <br />
-            ÷ ₱75 per credit = {calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}
+            1% creator value: ₱{Math.ceil(totalDayCost * RECOMMENDED_CREDIT_RATE).toLocaleString()}
+            <br />
+            ÷ ₱{CREDIT_PESO_RATE} per credit = {calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}
           </div>
           {calculatedCredits > 0 && (
             <div style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
-              At {calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''} · ₱{calculatedCredits * 10} per tourist · 80% to you = ₱{calculatedCredits * 8}
+              At {calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''} · ₱{calculatedCredits * CREDIT_PESO_RATE} per tourist · 80% to you = ₱{calculatedCredits * CREDIT_PESO_RATE * 0.8}
               <br />
-              Est. 50 unlocks/month = ₱{(calculatedCredits * 8 * 50).toLocaleString()} passive income
+              Est. 50 unlocks/month = ₱{(calculatedCredits * CREDIT_PESO_RATE * 0.8 * 50).toLocaleString()} passive income
             </div>
           )}
         </div>

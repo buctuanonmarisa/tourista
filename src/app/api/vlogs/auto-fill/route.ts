@@ -23,12 +23,33 @@ type GeneratedItineraryDay = {
   cost?: string | number
 }
 
+type YouTubeMetadata = {
+  title: string
+  author: string
+  thumbnailUrl: string
+  description?: string
+  durationSeconds?: number
+  keywords?: string[]
+  transcript?: string
+  transcriptLanguage?: string
+}
+
+type CaptionTrack = {
+  baseUrl?: string
+  languageCode?: string
+  name?: { simpleText?: string; runs?: Array<{ text?: string }> }
+  kind?: string
+  vssId?: string
+}
+
 const GEMINI_MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash',
 ].filter(Boolean) as string[]
+
+const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504])
 
 const stripToJson = (value: string) => {
   let cleanedText = value.trim()
@@ -49,6 +70,113 @@ const stripToJson = (value: string) => {
 
 const toDigits = (value: unknown) => String(value || '0').replace(/[^\d]/g, '')
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+const TRANSCRIPT_PROMPT_LIMIT = 12000
+
+const htmlDecode = (value: string) =>
+  value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+
+const compactWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim()
+
+const captionTrackName = (track: CaptionTrack) =>
+  track.name?.simpleText || track.name?.runs?.map(run => run.text || '').join('') || ''
+
+const chooseCaptionTrack = (tracks: CaptionTrack[]) => {
+  if (!tracks.length) return null
+
+  const manuallyCreatedEnglish = tracks.find(track =>
+    track.languageCode?.toLowerCase().startsWith('en') && track.kind !== 'asr'
+  )
+  if (manuallyCreatedEnglish) return manuallyCreatedEnglish
+
+  const anyEnglish = tracks.find(track => track.languageCode?.toLowerCase().startsWith('en'))
+  if (anyEnglish) return anyEnglish
+
+  return tracks.find(track => track.kind !== 'asr') || tracks[0]
+}
+
+const parseJson3Transcript = (data: any) => {
+  if (!Array.isArray(data?.events)) return ''
+
+  return compactWhitespace(
+    data.events
+      .flatMap((event: any) => Array.isArray(event?.segs) ? event.segs : [])
+      .map((segment: any) => segment?.utf8 || '')
+      .join(' '),
+  )
+}
+
+const parseXmlTranscript = (xml: string) =>
+  compactWhitespace(
+    [...xml.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g)]
+      .map(match => htmlDecode(decodeURIComponent(match[1].replace(/\+/g, ' '))))
+      .join(' '),
+  )
+
+const fetchCaptionTranscript = async (track: CaptionTrack) => {
+  if (!track.baseUrl) return ''
+
+  const transcriptUrl = new URL(track.baseUrl)
+  transcriptUrl.searchParams.set('fmt', 'json3')
+
+  const jsonResponse = await fetch(transcriptUrl.toString())
+  if (jsonResponse.ok) {
+    const data = await jsonResponse.json().catch(() => null)
+    const transcript = parseJson3Transcript(data)
+    if (transcript) return transcript
+  }
+
+  const xmlUrl = new URL(track.baseUrl)
+  const xmlResponse = await fetch(xmlUrl.toString())
+  if (!xmlResponse.ok) return ''
+
+  return parseXmlTranscript(await xmlResponse.text())
+}
+
+const extractJsonObject = (source: string, marker: string) => {
+  const markerIndex = source.indexOf(marker)
+  if (markerIndex < 0) return null
+
+  const firstBrace = source.indexOf('{', markerIndex)
+  if (firstBrace < 0) return null
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let index = firstBrace; index < source.length; index += 1) {
+    const char = source[index]
+
+    if (escaped) {
+      escaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      escaped = true
+      continue
+    }
+
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) continue
+    if (char === '{') depth += 1
+    if (char === '}') depth -= 1
+
+    if (depth === 0) {
+      return source.slice(firstBrace, index + 1)
+    }
+  }
+
+  return null
+}
 
 // Extract video ID from YouTube URL
 function extractVideoId(url: string): string | null {
@@ -76,15 +204,60 @@ async function fetchYouTubeMetadata(videoId: string) {
   }
 
   const data = await response.json()
-  return {
+  const metadata: YouTubeMetadata = {
     title: data.title || '',
     author: data.author_name || '',
     thumbnailUrl: data.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
   }
+
+  try {
+    const watchResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 TouristaMetadataBot/1.0',
+      },
+    })
+
+    if (watchResponse.ok) {
+      const html = await watchResponse.text()
+      const playerResponseJson = extractJsonObject(html, 'ytInitialPlayerResponse')
+
+      if (playerResponseJson) {
+        const playerResponse = JSON.parse(playerResponseJson)
+        const videoDetails = playerResponse?.videoDetails || {}
+        const captionTracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || []
+        metadata.title = videoDetails.title || metadata.title
+        metadata.author = videoDetails.author || metadata.author
+        metadata.description = videoDetails.shortDescription || metadata.description
+        metadata.durationSeconds = Number(videoDetails.lengthSeconds) || metadata.durationSeconds
+        metadata.keywords = Array.isArray(videoDetails.keywords)
+          ? videoDetails.keywords.slice(0, 20).map(String)
+          : metadata.keywords
+
+        if (Array.isArray(captionTracks)) {
+          const track = chooseCaptionTrack(captionTracks)
+          if (track) {
+            metadata.transcript = await fetchCaptionTranscript(track)
+            metadata.transcriptLanguage = captionTrackName(track) || track.languageCode
+          }
+        }
+      }
+
+      metadata.description ||= htmlDecode(
+        html.match(/<meta\s+name="description"\s+content="([^"]*)"/i)?.[1] ||
+        html.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i)?.[1] ||
+        '',
+      )
+    }
+  } catch (error) {
+    console.warn('YouTube page metadata unavailable; using oEmbed only:', error)
+  }
+
+  return metadata
 }
 
 // Generate enhanced vlog content using Google Gemini AI
-async function generateVlogContent(metadata: { title: string; author: string; thumbnailUrl: string }) {
+async function generateVlogContent(metadata: YouTubeMetadata) {
   const apiKey = process.env.GEMINI_API_KEY
 
   if (!apiKey) {
@@ -94,12 +267,22 @@ async function generateVlogContent(metadata: { title: string; author: string; th
   const genAI = new GoogleGenerativeAI(apiKey)
   const vibesList = FALLBACK_VIBES.join(', ')
   const countriesList = FALLBACK_COUNTRIES.join(', ')
+  const transcriptExcerpt = metadata.transcript
+    ? metadata.transcript.slice(0, TRANSCRIPT_PROMPT_LIMIT)
+    : 'Not available'
 
-  const prompt = `You are a travel vlog content specialist. Analyze this YouTube video metadata and generate structured travel vlog content.
+  const prompt = `You are a travel vlog content specialist. Analyze this YouTube video metadata and transcript, then generate structured travel vlog content.
 
 VIDEO METADATA:
 - Title: ${metadata.title}
 - Author: ${metadata.author}
+- Description: ${metadata.description || 'Not available'}
+- Keywords: ${metadata.keywords?.join(', ') || 'Not available'}
+- Duration: ${metadata.durationSeconds ? `${Math.round(metadata.durationSeconds / 60)} minutes` : 'Not available'}
+- Transcript language: ${metadata.transcriptLanguage || 'Not available'}
+
+TRANSCRIPT EXCERPT:
+${transcriptExcerpt}
 
 TASK: Generate a JSON response with these exact fields:
 {
@@ -126,14 +309,17 @@ TASK: Generate a JSON response with these exact fields:
 IMPORTANT:
 - Respond ONLY with valid JSON (no markdown, no code blocks, no backticks)
 - Use realistic cost estimates based on the destination
-- Extract actual locations mentioned in the title
+- Treat the transcript as the strongest source when it is available
+- Extract actual locations mentioned in the transcript or metadata only
+- Do not claim specific attractions, restaurants, transport routes, or events unless they are supported by the transcript or metadata
+- If the transcript and metadata are too vague, keep the itinerary broad and say what the traveler should verify
 - Choose vibes that match the video content
 - Return one itinerary object for every estimated day, up to 10 days maximum
 - Make every itinerary day distinct and useful, not generic filler
 - Day 1 and Day 2 should be free-preview quality; later days can be premium detail
 - Include food_tips, getting_there, tips, highlights, activity, and estimated_cost_php for every day
 - Keep descriptions engaging and informative
-- If location is unclear, default to "Philippines"
+- If location is unclear, choose the most likely country only when the title, description, or keywords support it; otherwise use "Philippines" but keep cities blank
 - Ensure all fields are present in the response`
 
   let lastError: unknown
@@ -146,7 +332,13 @@ IMPORTANT:
       lastError = error
       const status = Number(error?.status || error?.response?.status)
       const message = String(error?.message || '')
-      const canTryNextModel = status === 404 || message.includes('is not found') || message.includes('not supported')
+      const canTryNextModel =
+        status === 404 ||
+        RETRYABLE_GEMINI_STATUSES.has(status) ||
+        message.includes('is not found') ||
+        message.includes('not supported') ||
+        message.includes('high demand') ||
+        message.includes('try again later')
       if (!canTryNextModel) break
     }
   }

@@ -31,6 +31,9 @@ case "$DATABASE_URL" in
     ;;
 esac
 
+echo "Applying database migrations..."
+./node_modules/.bin/prisma migrate deploy
+
 # Start the application
 echo "Starting application on port ${PORT:-3000}..."
 exec node server.js

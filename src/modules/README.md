@@ -48,7 +48,7 @@ Complete vlog posting flow with validation and publishing.
   - Optional: highlights, food tips, getting there info
 
 - **Step 3: Credits & Publish**
-  - Automatic credits calculation (₱75 per credit)
+- Automatic credits calculation (1% of itinerary cost at ₱5 per credit)
   - Income projection display
   - Confirmation checkbox
   - Publish button
