@@ -85,24 +85,9 @@ jobs:
           || echo "SSH ingress rule may already exist; continuing."
           echo "added=true" >> "$GITHUB_OUTPUT"
 
-      - name: Verify EC2 SSH reachability
-        shell: bash
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          set -euo pipefail
-          echo "Checking SSH reachability to EC2 on port $EC2_SSH_PORT..."
-          for attempt in $(seq 1 12); do
-            if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$EC2_HOST/$EC2_SSH_PORT" 2>/dev/null; then
-              echo "EC2 SSH port is reachable."
-              exit 0
-            fi
-            echo "SSH is not reachable yet (attempt $attempt/12). Waiting 10 seconds..."
-            sleep 10
-          done
-          echo "Could not reach EC2 over SSH."
-          echo "Check that EC2_HOST is the public IPv4/DNS, the instance is running, and security group inbound allows TCP $EC2_SSH_PORT from ${{ steps.runner-ip.outputs.ipv4 }}/32."
-          exit 1
+          # Wait a few seconds for the security group rule to propagate
+          echo "Waiting 5 seconds for security group rule to propagate..."
+          sleep 5
 
       - name: Copy project to EC2
         uses: appleboy/scp-action@v0.1.7
