@@ -1,5 +1,6 @@
 'use client'
 
+import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface VlogAuthor {
@@ -19,7 +20,7 @@ interface MediaItem {
 
 interface ItineraryDay {
   id: string
-  day: number
+  day: { day: number }
   activity: string
   cost?: number | null
   locked: boolean
@@ -71,6 +72,9 @@ interface TourDestination {
   country: string
   lat: number
   lng: number
+  streetLat?: number
+  streetLng?: number
+  hasStreetView: boolean
   views: number
   likes: number
   author: VlogAuthor
@@ -81,6 +85,22 @@ interface TourDestination {
   rank: number
   score: number
   reason: string
+}
+
+interface TourAreaClip {
+  id: string
+  url: string
+  title: string
+  description?: string | null
+  day: number
+  vlogId: string
+  vlogTitle: string
+  location: string
+  country: string
+  coverImage?: string | null
+  author: VlogAuthor
+  views: number
+  likes: number
 }
 
 interface TourMeProps {
@@ -96,7 +116,7 @@ const normalizeLocationKey = (value: string) =>
 const LOCATION_COORDS: Record<string, { lat: number; lng: number }> = {
   siargao: { lat: 9.8482, lng: 126.0458 },
   palawan: { lat: 9.8349, lng: 118.7384 },
-  'el nido': { lat: 11.1956, lng: 119.4075 },
+  'el nido': { lat: 11.17307562502276, lng: 119.3950475274839 },
   coron: { lat: 12.0016, lng: 120.2009 },
   cebu: { lat: 10.3157, lng: 123.8854 },
   boracay: { lat: 11.9674, lng: 121.9248 },
@@ -105,14 +125,14 @@ const LOCATION_COORDS: Record<string, { lat: number; lng: number }> = {
   iloilo: { lat: 10.7202, lng: 122.5621 },
   dumaguete: { lat: 9.3068, lng: 123.3054 },
   tokyo: { lat: 35.6762, lng: 139.6503 },
-  kyoto: { lat: 35.0116, lng: 135.7681 },
+  kyoto: { lat: 34.97131910400563, lng: 135.77866553169181 },
   osaka: { lat: 34.6937, lng: 135.5023 },
   hiroshima: { lat: 34.3853, lng: 132.4553 },
   hokkaido: { lat: 43.2203, lng: 142.8635 },
   nara: { lat: 34.6851, lng: 135.8048 },
   kobe: { lat: 34.6901, lng: 135.1955 },
   fukuoka: { lat: 33.5902, lng: 130.4017 },
-  bangkok: { lat: 13.7563, lng: 100.5018 },
+  bangkok: { lat: 13.753597290416279, lng: 100.49182275558415 },
   'chiang mai': { lat: 18.7883, lng: 98.9853 },
   phuket: { lat: 7.8804, lng: 98.3923 },
   krabi: { lat: 8.0863, lng: 98.9063 },
@@ -125,24 +145,24 @@ const LOCATION_COORDS: Record<string, { lat: number; lng: number }> = {
   'hoi an': { lat: 15.8801, lng: 108.338 },
   sapa: { lat: 22.3364, lng: 103.8438 },
   'nha trang': { lat: 12.2388, lng: 109.1967 },
-  bali: { lat: -8.3405, lng: 115.092 },
+  bali: { lat: -8.590959828681374, lng: 115.08592107881513 },
   ubud: { lat: -8.5069, lng: 115.2625 },
   seminyak: { lat: -8.6913, lng: 115.1682 },
   lombok: { lat: -8.65, lng: 116.3249 },
   flores: { lat: -8.6574, lng: 121.0794 },
   yogyakarta: { lat: -7.7956, lng: 110.3695 },
-  rome: { lat: 41.9028, lng: 12.4964 },
-  paris: { lat: 48.8566, lng: 2.3522 },
+  rome: { lat: 41.89930661187925, lng: 12.477098843150232 },
+  paris: { lat: 48.859697126192614, lng: 2.2943954674158236 },
   london: { lat: 51.5072, lng: -0.1276 },
   barcelona: { lat: 41.3874, lng: 2.1686 },
   lisbon: { lat: 38.7223, lng: -9.1393 },
   istanbul: { lat: 41.0082, lng: 28.9784 },
-  santorini: { lat: 36.3932, lng: 25.4615 },
-  'new york': { lat: 40.7128, lng: -74.006 },
+  santorini: { lat: 36.41909126407468, lng: 25.43215848592153 },
+  'new york': { lat: 40.58698870663118, lng: -73.94609869695802 },
   'mexico city': { lat: 19.4326, lng: -99.1332 },
   'rio de janeiro': { lat: -22.9068, lng: -43.1729 },
-  banff: { lat: 51.4968, lng: -115.9281 },
-  'cape town': { lat: -33.9249, lng: 18.4241 },
+  banff: { lat: 51.50475402823146, lng: -115.92736956972638 },
+  'cape town': { lat: -33.891354246580676, lng: 18.42668549225774 },
   singapore: { lat: 1.3521, lng: 103.8198 },
   sydney: { lat: -33.8688, lng: 151.2093 },
   philippines: { lat: 12.8797, lng: 121.774 },
@@ -153,6 +173,153 @@ const LOCATION_COORDS: Record<string, { lat: number; lng: number }> = {
   usa: { lat: 39.8283, lng: -98.5795 },
   france: { lat: 46.2276, lng: 2.2137 },
   italy: { lat: 41.8719, lng: 12.5674 },
+  greece: { lat: 39.0742, lng: 21.8243 },
+  canada: { lat: 56.1304, lng: -106.3468 },
+  'south africa': { lat: -30.5595, lng: 22.9375 },
+}
+
+const fallbackAuthor: VlogAuthor = {
+  id: 'tourista-curated',
+  handle: 'tourista',
+  initials: 'TR',
+  avatarColor: 'ag',
+  verified: true,
+}
+
+interface CuratedCountryStop {
+  country: string
+  name: string
+  lat: number
+  lng: number
+  streetLat?: number
+  streetLng?: number
+  reason: string
+}
+
+const CURATED_COUNTRY_STOPS: CuratedCountryStop[] = [
+  { country: 'Philippines', name: 'El Nido', lat: 11.17307562502276, lng: 119.3950475274839, streetLat: 11.1801, streetLng: 119.3919, reason: 'Island lagoons, limestone cliffs, and clear water' },
+  { country: 'Japan', name: 'Kyoto', lat: 34.97131910400563, lng: 135.77866553169181, streetLat: 35.0037, streetLng: 135.7788, reason: 'Temples, old streets, gardens, and seasonal beauty' },
+  { country: 'Thailand', name: 'Bangkok', lat: 13.753597290416279, lng: 100.49182275558415, streetLat: 13.7525, streetLng: 100.4941, reason: 'Street food, temples, markets, and nightlife' },
+  { country: 'Indonesia', name: 'Bali', lat: -8.590959828681374, lng: 115.08592107881513, streetLat: -8.5069, streetLng: 115.2625, reason: 'Beaches, rice terraces, temples, and surf culture' },
+  { country: 'France', name: 'Paris', lat: 48.859697126192614, lng: 2.2943954674158236, streetLat: 48.8584, streetLng: 2.2945, reason: 'Museums, cafes, architecture, and classic city walks' },
+  { country: 'Italy', name: 'Rome', lat: 41.89930661187925, lng: 12.477098843150232, streetLat: 41.8902, streetLng: 12.4922, reason: 'Ancient landmarks, piazzas, and food neighborhoods' },
+  { country: 'Greece', name: 'Santorini', lat: 36.41909126407468, lng: 25.43215848592153, streetLat: 36.4618, streetLng: 25.3753, reason: 'Caldera views, white villages, and sunset viewpoints' },
+  { country: 'USA', name: 'New York City', lat: 40.58698870663118, lng: -73.94609869695802, streetLat: 40.758, streetLng: -73.9855, reason: 'Skyline walks, food, museums, and city energy' },
+  { country: 'Canada', name: 'Banff', lat: 51.50475402823146, lng: -115.92736956972638, streetLat: 51.1784, streetLng: -115.5708, reason: 'Turquoise lakes, mountain trails, and wildlife views' },
+  { country: 'South Africa', name: 'Cape Town', lat: -33.891354246580676, lng: 18.42668549225774, streetLat: -33.9628, streetLng: 18.4098, reason: 'Table Mountain, coast roads, penguins, and wine country' },
+]
+
+const makeTourAudioDataUrl = () => {
+  const sampleRate = 44100
+  const duration = 10
+  const sampleCount = Math.floor(sampleRate * duration)
+  const buffer = new ArrayBuffer(44 + sampleCount * 2)
+  const view = new DataView(buffer)
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i))
+  }
+
+  writeString(0, 'RIFF')
+  view.setUint32(4, 36 + sampleCount * 2, true)
+  writeString(8, 'WAVE')
+  writeString(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeString(36, 'data')
+  view.setUint32(40, sampleCount * 2, true)
+
+  const notes = [
+    { frequency: 146.83, start: 0, end: 9.8, gain: 0.12 },
+    { frequency: 220, start: 0.9, end: 9.4, gain: 0.1 },
+    { frequency: 523.25, start: 3.1, end: 3.32, gain: 0.3 },
+    { frequency: 659.25, start: 3.6, end: 3.82, gain: 0.26 },
+    { frequency: 783.99, start: 4.1, end: 4.32, gain: 0.24 },
+    { frequency: 987.77, start: 4.6, end: 4.82, gain: 0.22 },
+    { frequency: 587.33, start: 5.1, end: 5.32, gain: 0.24 },
+    { frequency: 739.99, start: 5.6, end: 5.82, gain: 0.22 },
+    { frequency: 880, start: 6.1, end: 6.32, gain: 0.22 },
+    { frequency: 1046.5, start: 6.6, end: 6.82, gain: 0.2 },
+    { frequency: 1174.66, start: 7.1, end: 7.32, gain: 0.2 },
+    { frequency: 1318.51, start: 7.6, end: 7.95, gain: 0.24 },
+  ]
+
+  for (let i = 0; i < sampleCount; i += 1) {
+    const time = i / sampleRate
+    const value = notes.reduce((sum, note, index) => {
+      if (time < note.start || time > note.end) return sum
+      const local = (time - note.start) / (note.end - note.start)
+      const envelope = Math.sin(Math.PI * local)
+      return sum + Math.sin(2 * Math.PI * note.frequency * time) * envelope * note.gain
+    }, 0)
+    const sweep = Math.sin(2 * Math.PI * (320 + time * 62) * time) * Math.sin(Math.PI * Math.min(1, time / 2)) * Math.sin(Math.PI * Math.min(1, (10 - time) / 1.6)) * 0.045
+    view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, value + sweep)) * 0x7fff, true)
+  }
+
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i])
+  return `data:audio/wav;base64,${btoa(binary)}`
+}
+
+export const playTourMeIntroAudio = () => {
+  if (typeof window === 'undefined') return
+  try {
+    const audio = new Audio(makeTourAudioDataUrl())
+    ;(window as typeof window & { tourMeIntroAudio?: HTMLAudioElement }).tourMeIntroAudio = audio
+    audio.muted = false
+    audio.volume = 1
+    audio.currentTime = 0
+    void audio.play().catch(() => {
+      window.setTimeout(() => {
+        void audio.play().catch(() => undefined)
+      }, 80)
+    })
+  } catch {
+    /* Fall back to Web Audio below. */
+  }
+
+  const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioContextCtor) return
+  try {
+    const context = new AudioContextCtor()
+    void context.resume()
+    const startedAt = context.currentTime + 0.02
+    const master = context.createGain()
+    master.gain.setValueAtTime(0.0001, startedAt)
+    master.gain.exponentialRampToValueAtTime(0.55, startedAt + 0.05)
+    master.gain.exponentialRampToValueAtTime(0.0001, startedAt + 10)
+    master.connect(context.destination)
+
+    const tone = (frequency: number, start: number, duration: number, volume = 0.28, type: OscillatorType = 'sine') => {
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      oscillator.type = type
+      oscillator.frequency.setValueAtTime(frequency, startedAt + start)
+      oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.12, startedAt + start + duration)
+      gain.gain.setValueAtTime(0.0001, startedAt + start)
+      gain.gain.exponentialRampToValueAtTime(volume, startedAt + start + 0.03)
+      gain.gain.exponentialRampToValueAtTime(0.0001, startedAt + start + duration)
+      oscillator.connect(gain)
+      gain.connect(master)
+      oscillator.start(startedAt + start)
+      oscillator.stop(startedAt + start + duration + 0.04)
+    }
+
+    tone(146.83, 0, 9.7, 0.13, 'triangle')
+    tone(220, 0.9, 8.5, 0.11, 'sine')
+    ;[523.25, 659.25, 783.99, 987.77, 587.33, 739.99, 880, 1046.5, 1174.66, 1318.51].forEach((frequency, index) => {
+      tone(frequency, 3.1 + index * 0.5, index === 9 ? 0.36 : 0.22, index === 9 ? 0.24 : 0.2)
+    })
+    tone(320, 4.4, 4.9, 0.09, 'sawtooth')
+    window.setTimeout(() => context.close().catch(() => undefined), 10400)
+  } catch {
+    /* Some browsers mute generated audio until a direct user gesture. */
+  }
 }
 
 const coordsForVlog = (vlog: { title: string; location?: string | null; country?: string | null }) => {
@@ -254,18 +421,39 @@ const googleMapOpenUrl = (destination?: TourDestination | null) => {
 
 const googleStreetViewEmbedUrl = (destination?: TourDestination | null) => {
   if (!destination) return ''
-  return `https://maps.google.com/maps?layer=c&cbll=${destination.lat},${destination.lng}&cbp=12,0,0,0,0&output=svembed`
+  if (!destination.hasStreetView || destination.streetLat == null || destination.streetLng == null) return ''
+  return `https://maps.google.com/maps?layer=c&cbll=${destination.streetLat},${destination.streetLng}&cbp=12,0,0,0,0&output=svembed`
 }
 
 const googleStreetViewOpenUrl = (destination?: TourDestination | null) => {
   if (!destination) return '#'
-  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${destination.lat},${destination.lng}`
+  const lat = destination.streetLat ?? destination.lat
+  const lng = destination.streetLng ?? destination.lng
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`
 }
 
 const mediaForDay = (day: ItineraryDay): MediaItem[] => {
   if (Array.isArray(day.media) && day.media.length) return day.media.filter(item => Boolean(item.url))
   if (day.mediaUrl) return [{ url: day.mediaUrl, type: day.mediaType === 'video' ? 'video' : 'image' }]
   return []
+}
+
+const clipLabelFor = (day: ItineraryDay, index: number) => {
+  const mediaCount = mediaForDay(day).length
+  return mediaCount > 1 ? `${day.activity} clip ${index + 1}` : day.activity
+}
+
+const routeCurvePath = (from: TourDestination, to: TourDestination, index: number) => {
+  const midX = (from.pin.x + to.pin.x) / 2
+  const midY = (from.pin.y + to.pin.y) / 2
+  const dx = to.pin.x - from.pin.x
+  const dy = to.pin.y - from.pin.y
+  const distance = Math.max(1, Math.hypot(dx, dy))
+  const sweep = index % 2 === 0 ? 1 : -1
+  const lift = Math.min(18, Math.max(7, distance * 0.18))
+  const controlX = Math.min(96, Math.max(4, midX - (dy / distance) * lift * sweep))
+  const controlY = Math.min(94, Math.max(6, midY + (dx / distance) * lift * sweep - 2))
+  return `M ${from.pin.x.toFixed(2)} ${from.pin.y.toFixed(2)} Q ${controlX.toFixed(2)} ${controlY.toFixed(2)} ${to.pin.x.toFixed(2)} ${to.pin.y.toFixed(2)}`
 }
 
 const PersonAvatar = ({ small = false }: { small?: boolean }) => (
@@ -298,36 +486,66 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const [vlogId, setVlogId] = useState('')
   const [detail, setDetail] = useState<VlogDetail | null>(null)
   const [clipId, setClipId] = useState('')
-  const [travelCue, setTravelCue] = useState<{ key: number; direction: 1 | -1; from: string; to: string } | null>(null)
+  const [areaClips, setAreaClips] = useState<TourAreaClip[]>([])
+  const [travelCue, setTravelCue] = useState<{ key: number; direction: 1 | -1; from: string; to: string; fromDest: TourDestination; toDest: TourDestination } | null>(null)
+  const [currentClipIndex, setCurrentClipIndex] = useState(0)
   const travelTimerRef = useRef<number | null>(null)
+  const clipsContainerRef = useRef<HTMLDivElement>(null)
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
+  const observerRef = useRef<IntersectionObserver | null>(null)
 
   const destinations = useMemo<TourDestination[]>(() => {
-    return [...vlogs]
-      .sort((a, b) => destinationScore(b) - destinationScore(a))
-      .slice(0, 8)
-      .map((v, index) => {
-        const coords = coordsForVlog(v)
-        return {
-          id: v.id,
-          title: v.title,
-          name: cityFromLocation(v.location, v.country),
-          city: cityFromLocation(v.location, v.country),
-          country: v.country || v.location.split(',').pop()?.trim() || 'Travel',
-          lat: coords.lat,
-          lng: coords.lng,
-          views: v.views || 0,
-          likes: v.likes || 0,
-          author: v.author,
-          description: v.description,
-          coverImage: v.coverImage || youtubeThumbForUrl(v.youtubeUrl),
-          youtubeUrl: v.youtubeUrl,
-          pin: pinForCoords(coords),
-          rank: index + 1,
-          score: destinationScore(v),
-          reason: reasonForDestination(v),
-        }
-      })
+    const bestVlogByCountry = new Map<string, TourMeVlog>()
+    ;[...vlogs].sort((a, b) => destinationScore(b) - destinationScore(a)).forEach(vlog => {
+      const country = (vlog.country || vlog.location.split(',').pop() || '').trim().toLowerCase()
+      if (country && !bestVlogByCountry.has(country)) bestVlogByCountry.set(country, vlog)
+    })
+
+    return CURATED_COUNTRY_STOPS.map((stop, index) => {
+      const vlog = bestVlogByCountry.get(stop.country.toLowerCase())
+      // Always use the curated coordinates from CURATED_COUNTRY_STOPS
+      const coords = { lat: stop.lat, lng: stop.lng }
+      return {
+        id: vlog?.id || `curated-${stop.country.toLowerCase().replace(/\s+/g, '-')}`,
+        title: vlog?.title || `${stop.name}: Best spot in ${stop.country}`,
+        name: stop.name,
+        city: stop.name,
+        country: stop.country,
+        lat: coords.lat,
+        lng: coords.lng,
+        streetLat: stop.streetLat,
+        streetLng: stop.streetLng,
+        hasStreetView: Boolean(stop.streetLat && stop.streetLng),
+        views: vlog?.views || 0,
+        likes: vlog?.likes || 0,
+        author: vlog?.author || fallbackAuthor,
+        description: vlog?.description || stop.reason,
+        coverImage: vlog?.coverImage || youtubeThumbForUrl(vlog?.youtubeUrl),
+        youtubeUrl: vlog?.youtubeUrl,
+        pin: pinForCoords(coords),
+        rank: index + 1,
+        score: vlog ? destinationScore(vlog) : CURATED_COUNTRY_STOPS.length - index,
+        reason: vlog ? reasonForDestination(vlog) : stop.reason,
+      }
+    })
   }, [vlogs])
+  const routeConnections = useMemo(() => {
+    const ranked = destinations.slice(0, 10)
+    return ranked.slice(0, -1).map((from, index) => {
+      const to = ranked[index + 1]
+      return {
+        key: `${from.id}-${to.id}`,
+        path: routeCurvePath(from, to, index),
+        accent: index % 3 === 1 ? 'green' : 'red',
+      }
+    })
+  }, [destinations])
+  const longRoutePath = useMemo(() => {
+    const usa = destinations.find(destination => destination.rank === 8)
+    const southAfrica = destinations.find(destination => destination.rank === 10)
+    if (!usa || !southAfrica) return ''
+    return routeCurvePath(usa, southAfrica, 10)
+  }, [destinations])
 
   const topDestination = destinations[0]
   const selectedDestination = destinations.find(destination => destination.id === vlogId) || topDestination
@@ -339,27 +557,51 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const googleOpenUrl = googleMapOpenUrl(selectedDestination)
   const googleStreetUrl = googleStreetViewEmbedUrl(selectedDestination)
   const googleStreetOpenUrl = googleStreetViewOpenUrl(selectedDestination)
-  const activeMapUrl = mapMode === 'street' ? googleStreetUrl : googleMapUrl
+  const activeMapUrl = mapMode === 'street' && googleStreetUrl ? googleStreetUrl : googleMapUrl
   const clipItems = itinerary.length
     ? itinerary
     : selectedDestination
-      ? [{ id: selectedDestination.id, day: 1, activity: selectedDestination.title, locked: false, highlights: selectedDestination.description || 'Open this destination from a live Tourista vlog.', cost: null, mediaUrl: null, mediaType: null, media: null, foodTips: null, gettingThere: null, tips: null }]
+      ? [{ id: selectedDestination.id, day: { day: 1 }, activity: selectedDestination.title, locked: false, highlights: selectedDestination.description || 'Open this destination from a live Tourista vlog.', cost: null, mediaUrl: null, mediaType: null, media: null, foodTips: null, gettingThere: null, tips: null }]
       : []
   const selectedClip = clipItems.find(day => day.id === clipId) || clipItems[0]
-  const selectedClipIndex = Math.max(0, clipItems.findIndex(day => day.id === selectedClip?.id))
-  const sourceVideoUrl = detail?.youtubeUrl || selectedDestination?.youtubeUrl || ''
-  const videoBase = sourceVideoUrl ? getEmbedUrl(sourceVideoUrl) : null
-  const selectedVideoUrl = videoBase ? `${videoBase}&start=${selectedClipIndex * 75}` : null
-  const selectedVideoThumb = youtubeThumbForUrl(sourceVideoUrl)
-  const selectedVideoMedia = selectedClip ? mediaForDay(selectedClip).find(item => item.type === 'video') : null
-  const activeClipMedia = selectedVideoMedia || (selectedVideoUrl ? { url: selectedVideoUrl, type: 'video' as const } : null)
-  const activeClipEmbedUrl = activeClipMedia ? (getEmbedUrl(activeClipMedia.url) || (activeClipMedia.url.includes('youtube.com/embed') ? activeClipMedia.url : null)) : null
-  const activeClipDirectUrl = activeClipMedia && !activeClipEmbedUrl && isDirectVideoUrl(activeClipMedia.url) ? activeClipMedia.url : null
-  const activeClipExternalUrl = activeClipMedia && !activeClipEmbedUrl && !activeClipDirectUrl ? activeClipMedia.url : ''
-  const activeClipThumb = activeClipMedia ? (youtubeThumbForUrl(activeClipMedia.url) || selectedVideoThumb) : selectedVideoThumb
+  const fallbackAreaClips: TourAreaClip[] = clipItems.flatMap(day =>
+    mediaForDay(day)
+      .filter(item => item.type === 'video')
+      .map((item, index) => ({
+        id: `${day.id}-${index}`,
+        url: item.url,
+        title: clipLabelFor(day, index),
+        description: day.highlights || day.tips || selectedDestination?.title || '',
+        day: typeof day.day === 'number' ? day.day : day.day.day,
+        vlogId: selectedDestination?.id || '',
+        vlogTitle: selectedDestination?.title || '',
+        location: `${selectedDestination?.city || ''}, ${selectedDestination?.country || ''}`,
+        country: selectedDestination?.country || '',
+        coverImage: selectedDestination?.coverImage || '',
+        author: selectedDestination?.author || fallbackAuthor,
+        views: selectedDestination?.views || 0,
+        likes: selectedDestination?.likes || 0,
+      })),
+  )
+  const displayedAreaClips = areaClips.length ? areaClips : fallbackAreaClips
+
+  const loadAreaClips = useCallback(async (destination: TourDestination) => {
+    try {
+      const params = new URLSearchParams({ spot: destination.name, country: destination.country })
+      const response = await fetch(`/api/tourme/clips?${params.toString()}`)
+      if (!response.ok) {
+        setAreaClips([])
+        return
+      }
+      const data: { clips?: TourAreaClip[] } = await response.json()
+      setAreaClips(Array.isArray(data.clips) ? data.clips : [])
+    } catch {
+      setAreaClips([])
+    }
+  }, [])
 
   const loadDetail = useCallback(async (id: string) => {
-    if (!id) return
+    if (!id || id.startsWith('curated-')) return
     try {
       const response = await fetch(`/api/vlogs/${id}`)
       if (!response.ok) return
@@ -376,9 +618,18 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     setClipId('')
     setDetail(null)
     loadDetail(destination.id)
-    setMapMode(options?.street ? 'street' : 'map')
+    loadAreaClips(destination)
+    setMapMode(destination.hasStreetView ? 'street' : 'map')
     setStage('place')
-  }, [loadDetail])
+  }, [loadAreaClips, loadDetail])
+
+  const playNextClip = useCallback(() => {
+    if (!displayedAreaClips.length) return
+    const currentIndex = displayedAreaClips.findIndex(clip => clip.id === clipId)
+    const nextIndex = (currentIndex + 1) % displayedAreaClips.length
+    const nextClip = displayedAreaClips[nextIndex]
+    setClipId(nextClip.id)
+  }, [clipId, displayedAreaClips])
 
   const moveDestination = (direction: 1 | -1) => {
     if (!destinations.length || !selectedDestination) return
@@ -386,18 +637,38 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     const nextIndex = (Math.max(0, currentIndex) + direction + destinations.length) % destinations.length
     const nextDestination = destinations[nextIndex]
     if (travelTimerRef.current) window.clearTimeout(travelTimerRef.current)
-    setTravelCue({ key: Date.now(), direction, from: selectedDestination.name, to: nextDestination.name })
+
+    // First, update the selected destination immediately for pin highlighting
+    setVlogId(nextDestination.id)
+
+    // Show world map with travel animation
+    setTravelCue({
+      key: Date.now(),
+      direction,
+      from: selectedDestination.name,
+      to: nextDestination.name,
+      fromDest: selectedDestination,
+      toDest: nextDestination
+    })
     setMapMode('map')
-    setStage('place')
+    setStage('world')
+
+    // After animation, switch to the new destination with full details
     travelTimerRef.current = window.setTimeout(() => {
-      selectDestination(nextDestination, { street: true })
+      setClipId('')
+      setDetail(null)
+      loadDetail(nextDestination.id)
+      loadAreaClips(nextDestination)
+      setMapMode(nextDestination.hasStreetView ? 'street' : 'map')
+      setStage('place')
+      setTravelCue(null)
       travelTimerRef.current = null
-    }, 3600)
+    }, 4200)
   }
 
   useEffect(() => {
     if (!travelCue) return
-    const timer = window.setTimeout(() => setTravelCue(null), 5000)
+    const timer = window.setTimeout(() => setTravelCue(null), 4500)
     return () => window.clearTimeout(timer)
   }, [travelCue])
 
@@ -417,11 +688,101 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   useEffect(() => {
     if (!open) return
     setStage('world')
+    setCurrentClipIndex(0)
     if (destinations[0]) {
       setVlogId(destinations[0].id)
       loadDetail(destinations[0].id)
+      loadAreaClips(destinations[0])
     }
-  }, [destinations, loadDetail, open])
+  }, [destinations, loadAreaClips, loadDetail, open])
+
+  // TikTok-style intersection observer for autoplay
+  useEffect(() => {
+    if (!displayedAreaClips.length || stage !== 'place') return
+
+    const options = {
+      root: clipsContainerRef.current,
+      threshold: 0.75, // 75% of video must be visible
+    }
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const videoElement = entry.target as HTMLElement
+        const clipId = videoElement.dataset.clipId
+        if (!clipId) return
+
+        const video = videoRefs.current.get(clipId)
+
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.75) {
+          // Pause all other videos
+          videoRefs.current.forEach((v, id) => {
+            if (id !== clipId) {
+              v.pause()
+            }
+          })
+
+          // Play this video
+          if (video) {
+            video.play().catch(() => {
+              // Autoplay might be blocked, user needs to interact first
+            })
+          }
+
+          // Update current clip index
+          const index = displayedAreaClips.findIndex(c => c.id === clipId)
+          if (index !== -1) {
+            setCurrentClipIndex(index)
+            setClipId(clipId)
+          }
+        } else {
+          // Pause when out of view
+          if (video) {
+            video.pause()
+          }
+        }
+      })
+    }, options)
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+      }
+    }
+  }, [displayedAreaClips, stage])
+
+  // Auto-advance to next clip when video ends
+  useEffect(() => {
+    const handleVideoEnd = (clipId: string) => {
+      const currentIndex = displayedAreaClips.findIndex(c => c.id === clipId)
+      const nextIndex = (currentIndex + 1) % displayedAreaClips.length
+
+      // Scroll to next clip
+      const container = clipsContainerRef.current
+      if (container) {
+        const clipElements = container.querySelectorAll('.tour-tiktok-clip')
+        const nextElement = clipElements[nextIndex] as HTMLElement
+        if (nextElement) {
+          nextElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }
+    }
+
+    // Add ended listeners to all videos
+    videoRefs.current.forEach((video, clipId) => {
+      const handler = () => handleVideoEnd(clipId)
+      video.addEventListener('ended', handler)
+      video.dataset.endHandler = 'attached'
+    })
+
+    return () => {
+      videoRefs.current.forEach((video) => {
+        if (video.dataset.endHandler) {
+          video.removeEventListener('ended', () => {})
+          delete video.dataset.endHandler
+        }
+      })
+    }
+  }, [displayedAreaClips])
 
   if (!open) return null
 
@@ -431,24 +792,77 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
         <div className={`tour-map ${stage === 'world' ? 'is-world' : 'is-place'}`}>
           {stage === 'world' ? (
             <div className="tour-world">
-              <div className="tour-world-map" aria-hidden="true">
-                {worldMapTiles.map(tile => <img key={tile.key} src={tile.url} style={{ left: tile.left, top: tile.top }} alt="" loading="lazy" />)}
+              <div className="tour-globe" aria-hidden="true">
+                <div className="tour-globe-map">
+                  {[0, 1].map(copy => (
+                    <div key={copy} className="tour-globe-strip" style={{ left: `${copy * 100}%` }}>
+                      {worldMapTiles.map(tile => <img key={`${copy}-${tile.key}`} src={tile.url} style={{ left: tile.left, top: tile.top }} alt="" loading="eager" />)}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <svg className="tour-world-route" viewBox="0 0 900 520" aria-hidden="true">
-                <path className="tour-route" d="M164 318 C286 225 378 340 490 244 S682 180 767 282" />
-                <path className="tour-route route-two" d="M210 250 C338 155 500 166 684 238" />
+              <div className="tour-world-map" aria-hidden="true">
+                {worldMapTiles.map(tile => <img key={tile.key} src={tile.url} style={{ left: tile.left, top: tile.top }} alt="" loading="eager" />)}
+              </div>
+              <svg className="tour-world-route" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <marker id="tourRouteArrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#e53935" />
+                  </marker>
+                  <marker id="tourRouteArrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#22c55e" />
+                  </marker>
+                </defs>
+                {routeConnections.map((connection, index) => (
+                  <g key={connection.key} className="tour-route-leg" style={{ '--leg-order': index } as CSSProperties}>
+                    <path className="tour-route-underlay" d={connection.path} />
+                    <path className={`tour-route-leg-path ${connection.accent === 'green' ? 'green' : 'red'}`} d={connection.path} markerEnd={`url(#tourRouteArrow${connection.accent === 'green' ? 'Green' : 'Red'})`} />
+                    <circle className="tour-route-spark" r="1.2">
+                      <animateMotion dur="2.15s" begin={`${5 + index * 0.22}s`} fill="freeze" path={connection.path} />
+                    </circle>
+                  </g>
+                ))}
+                {longRoutePath && (
+                  <g className="tour-route-leg tour-route-long" style={{ '--leg-order': 10 } as CSSProperties}>
+                    <path className="tour-route-underlay" d={longRoutePath} />
+                    <path className="tour-route-leg-path green" d={longRoutePath} markerEnd="url(#tourRouteArrowGreen)" />
+                  </g>
+                )}
+                {travelCue && travelCue.fromDest && travelCue.toDest && (
+                  <g key={travelCue.key} className="tour-travel-route">
+                    <path
+                      className="tour-travel-route-path"
+                      d={routeCurvePath(travelCue.fromDest, travelCue.toDest, 0)}
+                      markerEnd="url(#tourRouteArrowGreen)"
+                    />
+                    <circle className="tour-travel-plane-marker" r="2.4" fill="#e53935">
+                      <animateMotion dur="3.8s" fill="freeze" calcMode="spline" keySplines="0.34 0.46 0.64 0.94" path={routeCurvePath(travelCue.fromDest, travelCue.toDest, 0)} />
+                    </circle>
+                  </g>
+                )}
               </svg>
               <div className="tour-world-pins">
-                {destinations.map(destination => (
-                  <button key={destination.id} className={`tour-pin${destination.id === selectedDestination?.id ? ' active' : ''}${destination.id === topDestination?.id ? ' hot' : ''}`} style={{ left:`${destination.pin.x}%`, top:`${destination.pin.y}%` }} onClick={() => selectDestination(destination, { street: true })} title={`${destination.name}, ${destination.country}`}>
-                    <span>{destination.rank}</span>
-                  </button>
-                ))}
+                {destinations.map((destination, index) => {
+                  const isTravelFrom = travelCue && destination.id === travelCue.fromDest?.id
+                  const isTravelTo = travelCue && destination.id === travelCue.toDest?.id
+                  return (
+                    <button
+                      key={destination.id}
+                      className={`tour-pin${destination.id === selectedDestination?.id ? ' active' : ''}${destination.id === topDestination?.id ? ' hot' : ''}${isTravelFrom ? ' travel-from' : ''}${isTravelTo ? ' travel-to' : ''}`}
+                      style={{ left:`${destination.pin.x}%`, top:`${destination.pin.y}%`, '--pin-order': index } as CSSProperties}
+                      onClick={() => selectDestination(destination)}
+                      title={`${destination.name}, ${destination.country}`}
+                    >
+                      <span>{destination.rank}</span>
+                      <small>{destination.country}</small>
+                    </button>
+                  )
+                })}
               </div>
               <div className="tour-plane" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
               </div>
-              <div className="tour-scan-card"><strong>Top spots to visit</strong><span>Ranked by views, likes, and trending vlogs</span></div>
+              <div className="tour-scan-card"><strong>Connected routes</strong><span>Follow the arrows between pinned destinations</span></div>
             </div>
           ) : (
             <>
@@ -470,9 +884,9 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
                 </a>
                 <div className="tour-map-mode" aria-label="Map view mode">
                   <button type="button" className={mapMode === 'map' ? 'active' : ''} onClick={() => setMapMode('map')}>Map</button>
-                  <button type="button" className={mapMode === 'street' ? 'active' : ''} onClick={() => setMapMode('street')}>Street</button>
+                  <button type="button" className={mapMode === 'street' ? 'active' : ''} onClick={() => selectedDestination?.hasStreetView ? setMapMode('street') : setMapMode('map')} disabled={!selectedDestination?.hasStreetView}>Street</button>
                 </div>
-                {mapMode === 'map' && activeMapUrl && (
+                {mapMode === 'map' && activeMapUrl && selectedDestination?.hasStreetView && (
                   <button
                     type="button"
                     className="tour-street-hotspot"
@@ -516,81 +930,108 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
         </div>
         <aside className="tour-panel">
           <div className="tour-panel-head">
-            <div><div className="tour-kicker">{stage === 'world' ? 'Top spot finder' : 'Avatar placed here'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
-            <button className="tour-close" onClick={onClose} aria-label="Close tour me">x</button>
+            <div><div className="tour-kicker">{stage === 'world' ? 'Clip route finder' : 'Clips in this spot'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
+            <button className="tour-close" onClick={onClose} aria-label="Close tour me">×</button>
           </div>
-          <div className="tour-stats"><span>#{displayedDestination?.rank || 1} top spot</span><span>{shortCount(displayedDestination?.views || 0)} views</span><span>{shortCount(displayedDestination?.likes || 0)} likes</span></div>
-          {displayedDestination && (
-            <button type="button" className="tour-top-spot" onClick={() => selectDestination(displayedDestination, { street: true })}>
-              <span className="tour-top-media" style={{ backgroundImage: displayedDestination.coverImage ? `url('${displayedDestination.coverImage}')` : undefined }}>
-                {!displayedDestination.coverImage && displayedDestination.name.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="tour-top-copy">
-                <span>Best match for your next stop</span>
-                <strong>{displayedDestination.title}</strong>
-                <small>{displayedDestination.reason}</small>
-              </span>
-            </button>
-          )}
           <div className="tour-next-controls">
             <button type="button" onClick={() => moveDestination(-1)} aria-label="Previous destination">
               <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
               Prev
             </button>
             <button type="button" onClick={() => moveDestination(1)} aria-label="Next destination">
-              Next destination
+              Next
               <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
-          <p className="tour-why">{stage === 'world' ? `Pick one of the top spots below, or jump straight into ${topDestination?.name || 'the top destination'} to see map context and itinerary clips.` : (detail?.description || selectedDestination?.description || selectedDestination?.title || 'Selected from live Tourista vlog data.')}</p>
-          <div className="tour-list-title">Top spots to visit</div>
-          <div className="tour-top-list">
-            {destinations.map(destination => (
-              <button key={destination.id} type="button" className={`tour-top-item${destination.id === selectedDestination?.id ? ' active' : ''}`} onClick={() => selectDestination(destination, { street: true })}>
-                <span className="tour-top-rank">{destination.rank}</span>
-                <span className="tour-top-thumb" style={{ backgroundImage: destination.coverImage ? `url('${destination.coverImage}')` : undefined }} />
-                <span className="tour-top-item-copy">
-                  <strong>{destination.name}</strong>
-                  <small>{destination.country} · {destination.reason}</small>
-                </span>
-              </button>
-            ))}
-          </div>
-          {activeClipMedia && (
-            <div className="tour-video-player" style={{ backgroundImage: activeClipThumb ? `url('${activeClipThumb}')` : undefined }}>
-              {activeClipEmbedUrl ? (
-                <iframe src={activeClipEmbedUrl} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen title={`${selectedDestination?.title || 'Vlog'} video`} />
-              ) : activeClipDirectUrl ? (
-                <video src={activeClipDirectUrl} controls playsInline/>
-              ) : (
-                <a href={activeClipExternalUrl} target="_blank" rel="noopener noreferrer" className="tour-video-link">
-                  <span className="tour-video-play"><svg viewBox="0 0 24 24"><polygon points="8 5 19 12 8 19 8 5"/></svg></span>
-                  <strong>Open itinerary clip</strong>
-                </a>
-              )}
+          {/* TikTok-style vertical scrolling clips */}
+          {stage === 'place' && displayedAreaClips.length > 0 ? (
+            <div ref={clipsContainerRef} className="tour-tiktok-container">
+              {displayedAreaClips.map((clip, index) => {
+                const embedUrl = getEmbedUrl(clip.url)
+                return (
+                  <div
+                    key={clip.id}
+                    className="tour-tiktok-clip"
+                    data-clip-id={clip.id}
+                    ref={(el) => {
+                      if (el && observerRef.current) {
+                        observerRef.current.observe(el)
+                      }
+                    }}
+                  >
+                    <div className="tour-tiktok-video">
+                      {isDirectVideoUrl(clip.url) ? (
+                        <video
+                          ref={(el) => {
+                            if (el) videoRefs.current.set(clip.id, el)
+                          }}
+                          src={clip.url}
+                          loop
+                          playsInline
+                          muted={false}
+                          className="tour-tiktok-video-element"
+                        />
+                      ) : embedUrl ? (
+                        <iframe
+                          src={`${embedUrl}&autoplay=0&mute=0&loop=1&controls=1`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          title={clip.title}
+                          className="tour-tiktok-video-element"
+                        />
+                      ) : null}
+                    </div>
+
+                    {/* Overlay info */}
+                    <div className="tour-tiktok-overlay">
+                      <div className="tour-tiktok-info">
+                        <div className="tour-tiktok-author">
+                          <div className="tour-tiktok-avatar" style={{ background: `var(--${clip.author.avatarColor})` }}>
+                            {clip.author.initials}
+                          </div>
+                          <span className="tour-tiktok-handle">@{clip.author.handle}</span>
+                          {clip.author.verified && <span className="tour-tiktok-verified">✓</span>}
+                        </div>
+                        <h3 className="tour-tiktok-title">{clip.title}</h3>
+                        <p className="tour-tiktok-description">{clip.description}</p>
+                        <div className="tour-tiktok-location">
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                          </svg>
+                          {clip.location}
+                        </div>
+                      </div>
+
+                      {/* Side actions */}
+                      <div className="tour-tiktok-actions">
+                        <button className="tour-tiktok-action-btn">
+                          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                          </svg>
+                          <span>{shortCount(clip.likes)}</span>
+                        </button>
+                        <button className="tour-tiktok-action-btn">
+                          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                            <path d="M15 12c0 1.654-1.346 3-3 3s-3-1.346-3-3 1.346-3 3-3 3 1.346 3 3zm9-.449s-4.252 8.449-11.985 8.449c-7.18 0-12.015-8.449-12.015-8.449s4.446-7.551 12.015-7.551c7.694 0 11.985 7.551 11.985 7.551zm-7 .449c0-2.757-2.243-5-5-5s-5 2.243-5 5 2.243 5 5 5 5-2.243 5-5z"/>
+                          </svg>
+                          <span>{shortCount(clip.views)}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Clip counter */}
+                    <div className="tour-tiktok-counter">
+                      {index + 1} / {displayedAreaClips.length}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
+          ) : stage === 'world' ? (
+            <p className="tour-why">Pick a pin to see short clips and map context from Tourista vloggers.</p>
+          ) : (
+            <div className="tour-empty-clips">No short clips available for this destination yet.</div>
           )}
-          <div className="tour-list-title">Itinerary clips from vloggers</div>
-          <div className="tour-actions">
-            {clipItems.map((day, index) => {
-              const media = mediaForDay(day)
-              const thumb = media[0]?.type === 'image' ? media[0].url : youtubeThumbForUrl(detail?.youtubeUrl || selectedDestination?.youtubeUrl)
-              const active = day.id === selectedClip?.id || (!selectedClip && index === 0)
-              return (
-                <button key={day.id} className={`tour-action${active ? ' active' : ''}`} onClick={() => { if (selectedDestination) setVlogId(selectedDestination.id); setClipId(day.id); setStage('place') }}>
-                  <span className="tour-clip-thumb" style={{ backgroundImage: thumb ? `url('${thumb}')` : undefined }}>
-                    {media[0]?.type === 'video' && isDirectVideoUrl(media[0].url) ? <video src={media[0].url} muted playsInline /> : <svg viewBox="0 0 24 24"><polygon points="8 5 19 12 8 19 8 5"/></svg>}
-                  </span>
-                  <span className="tour-action-copy">
-                    <span className="tour-action-kind">Day {day.day} · itinerary clip</span>
-                    <strong>{day.activity}</strong>
-                    <small>{day.highlights || day.tips || selectedDestination?.title}</small>
-                    <em>by @{selectedDestination?.author.handle || 'creator'}{media.length ? ` · ${media.length} media` : ''}</em>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
         </aside>
       </div>
     </div>
