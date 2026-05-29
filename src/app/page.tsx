@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import EmojiPicker from 'emoji-picker-react'
 import { DEFAULT_COUNTRY, FALLBACK_BUDGETS, FALLBACK_COUNTRIES, FALLBACK_VIBES } from '@/lib/travel-options'
 import TourMe from '@/modules/TourMe'
@@ -61,6 +61,7 @@ interface SavedDraft {
 }
 const defaultPostForm = { title: '', description: '', country: DEFAULT_COUNTRY, cities: '', vibe: '', credits: 2, coverImage: '', cost: '', duration: '' }
 const CREDIT_PESO_RATE = 5
+const CREATOR_EARNINGS_SHARE = 0.8
 const RECOMMENDED_CREDIT_RATE = 0.01
 const recommendedCreditsForCost = (cost: number) =>
   cost > 0 ? Math.ceil((cost * RECOMMENDED_CREDIT_RATE) / CREDIT_PESO_RATE) : 0
@@ -252,6 +253,7 @@ export default function Home() {
   const [editingVlogId, setEditingVlogId] = useState<string | null>(null)
   const [autoplayVlogId, setAutoplayVlogId] = useState<string | null>(null)
   const [tourMeOpen, setTourMeOpen] = useState(false)
+  const [dashboardMonthIndex, setDashboardMonthIndex] = useState<number | null>(11)
 
   /* ─── Refs for file inputs ─── */
   const coverRef = useRef<HTMLInputElement>(null)
@@ -334,6 +336,30 @@ export default function Home() {
     setUnlocked(false)
     setReviewText('')
   }
+  const stopPageVideos = useCallback(() => {
+    if (typeof document === 'undefined') return
+    document.querySelectorAll('video').forEach(video => {
+      video.pause()
+      video.currentTime = 0
+    })
+    document.querySelectorAll<HTMLIFrameElement>('iframe').forEach(frame => {
+      const src = frame.getAttribute('src')
+      if (!src || !/(youtube\.com|youtu\.be)/i.test(src)) return
+      const stoppedSrc = src
+        .replace(/([?&])autoplay=1\b/g, '$1autoplay=0')
+        .replace(/([?&])mute=0\b/g, '$1mute=1')
+      frame.setAttribute('src', stoppedSrc)
+    })
+  }, [])
+  const openTourMe = () => {
+    stopPageVideos()
+    setActiveFeedId(null)
+    setSelectedMyVlogId(null)
+    setDashboardMode('list')
+    setVlog(null)
+    setAutoplayVlogId(null)
+    setTourMeOpen(true)
+  }
   const go = (p: string) => {
     setPrev(page)
     if (p === 'browse' || p === 'dashboard') closeVlogPanels()
@@ -405,6 +431,8 @@ export default function Home() {
   }
   const withAutoplay = (url: string, muted = true) =>
     `${url}${url.includes('?') ? '&' : '?'}autoplay=1&mute=${muted ? '1' : '0'}&playsinline=1`
+  const withManualPlayback = (url: string) =>
+    `${url}${url.includes('?') ? '&' : '?'}autoplay=0&mute=0&playsinline=1`
   const getFeedEmbedUrl = (v: VlogCard) => {
     const base = v.youtubeUrl ? getEmbedUrl(v.youtubeUrl) : null
     return base ? withAutoplay(base, true) : null
@@ -420,7 +448,7 @@ export default function Home() {
     /\.(mp4|webm|ogg)(\?|#|$)/i.test(url)
   const clipPreviewUrl = (url: string) => {
     const embed = getEmbedUrl(url)
-    return embed ? withAutoplay(embed, false) : null
+    return embed ? withManualPlayback(embed) : null
   }
 
   const detectVideo = (url: string) => {
@@ -857,7 +885,7 @@ export default function Home() {
       return <iframe src={previewUrl} title={title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
     }
     if (directVideoUrl(item.url)) {
-      return <video src={item.url} autoPlay loop playsInline controls />
+      return <video src={item.url} preload="metadata" playsInline controls />
     }
     return (
       <div className="clip-link-preview">
@@ -1222,12 +1250,45 @@ export default function Home() {
     }
     return countryCurrencies[key] || 'USD'
   }
-  const fmtProfileMoney = (amount?: number | null) =>
+  const pesoToCurrencyRate = (currency: string) => {
+    const rates: Record<string, number> = {
+      PHP: 1,
+      USD: 0.017,
+      EUR: 0.016,
+      JPY: 2.7,
+      CAD: 0.024,
+      AUD: 0.026,
+      GBP: 0.014,
+      THB: 0.63,
+      IDR: 282,
+      SGD: 0.023,
+      MYR: 0.081,
+      VND: 440,
+      KRW: 24,
+      CNY: 0.12,
+      INR: 1.45,
+      MXN: 0.31,
+      BRL: 0.095,
+      ARS: 15,
+      PEN: 0.064,
+      CLP: 16,
+      COP: 68,
+      ZAR: 0.31,
+      EGP: 0.83,
+    }
+    return rates[currency] || rates.USD
+  }
+  const userCurrency = currencyForCountry(profile?.country)
+  const pesosToUserCurrency = (amountPhp: number) => amountPhp * pesoToCurrencyRate(userCurrency)
+  const fmtProfileMoney = (amountPhp?: number | null) =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: currencyForCountry(profile?.country),
+      currency: userCurrency,
       maximumFractionDigits: 0,
-    }).format(amount || 0)
+    }).format(pesosToUserCurrency(amountPhp || 0))
+  const fmtCreditPrice = (credits: number) => fmtProfileMoney(credits * CREDIT_PESO_RATE)
+  const fmtShortNumber = (value: number) =>
+    value >= 1000000 ? `${(value / 1000000).toFixed(1)}M` : value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(Math.round(value))
   const activeFilters = [
     ...selectedVibes,
     ...selectedCountries,
@@ -1243,6 +1304,51 @@ export default function Home() {
   const updCr = (v: number) => {
     setPostForm(f => ({ ...f, credits: v }))
   }
+  const dashboardMonths = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 12 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1)
+      return {
+        label: date.toLocaleDateString('en-US', { month: 'short' }),
+        fullLabel: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      }
+    })
+  }, [])
+  const dashboardMonthly = useMemo(() => {
+    const weights = [0.62, 0.74, 0.68, 0.88, 0.82, 0.96, 0.9, 1.08, 1.02, 1.2, 1.14, 1.32]
+    const weightTotal = weights.reduce((sum, weight) => sum + weight, 0)
+    const vlogViews = myVlogs.reduce((sum, item) => sum + (item.views || 0), 0)
+    const paidCredits = myVlogs.reduce((sum, item) => sum + Math.max(0, item.credits || 0), 0)
+    const totalCredits = Math.max(profile?.credits || 0, paidCredits || 0, 12)
+    const totalViews = Math.max(profile?.totalViews || 0, vlogViews || 0, 1200)
+    const totalEarningsPhp = Math.max(
+      profile?.earnings || 0,
+      totalCredits * CREDIT_PESO_RATE * CREATOR_EARNINGS_SHARE,
+      paidCredits * CREDIT_PESO_RATE * CREATOR_EARNINGS_SHARE,
+      CREDIT_PESO_RATE * CREATOR_EARNINGS_SHARE,
+    )
+
+    return dashboardMonths.map((month, index) => {
+      const share = weights[index] / weightTotal
+      return {
+        ...month,
+        earningsPhp: Math.max(CREDIT_PESO_RATE * CREATOR_EARNINGS_SHARE, Math.round(totalEarningsPhp * share)),
+        credits: Math.max(1, Math.round(totalCredits * share)),
+        views: Math.max(1, Math.round(totalViews * share)),
+        unlocks: Math.max(1, Math.round((totalCredits * share) / 2)),
+      }
+    })
+  }, [dashboardMonths, myVlogs, profile?.credits, profile?.earnings, profile?.totalViews])
+  const dashboardTotal = useMemo(() => dashboardMonthly.reduce((total, month) => ({
+    label: 'Total',
+    fullLabel: 'Last 12 months',
+    earningsPhp: total.earningsPhp + month.earningsPhp,
+    credits: total.credits + month.credits,
+    views: total.views + month.views,
+    unlocks: total.unlocks + month.unlocks,
+  }), { label: 'Total', fullLabel: 'Last 12 months', earningsPhp: 0, credits: 0, views: 0, unlocks: 0 }), [dashboardMonthly])
+  const dashboardSelected = dashboardMonthIndex == null ? dashboardTotal : dashboardMonthly[dashboardMonthIndex] || dashboardTotal
+  const maxDashboardEarnings = Math.max(...dashboardMonthly.map(month => month.earningsPhp), 1)
 
   const calculateCreditsFromCost = () => {
     // Sum all day costs
@@ -1322,7 +1428,7 @@ export default function Home() {
               <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
               <span className="tn-btn-label">Dashboard</span>
             </button>
-            <button className="tn-btn tn-tour" onClick={() => setTourMeOpen(true)} aria-label="Tour me">
+            <button className="tn-btn tn-tour" onClick={openTourMe} aria-label="Tour me">
               <svg viewBox="0 0 24 24"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
               <span className="tn-btn-label">Tour me</span>
             </button>
@@ -1571,7 +1677,7 @@ export default function Home() {
                   {vlog.credits > 0 && !unlocked && (
                     <div style={{ padding:'12px', background:'var(--yl)', borderRadius:'10px', marginBottom:'14px' }}>
                       <div style={{ fontSize:'13px', fontWeight:600, color:'var(--y1)', marginBottom:'6px' }}>Unlock itinerary</div>
-                      <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · ₱{vlog.credits * CREDIT_PESO_RATE}</div>
+                      <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · {fmtCreditPrice(vlog.credits)}</div>
                       <button className="gi-panel-btn gi-panel-btn-primary" onClick={doUnlock} style={{ background:'var(--y)', color:'var(--y1)', fontSize:'12px', padding:'8px' }}>
                         Unlock
                       </button>
@@ -1622,7 +1728,7 @@ export default function Home() {
                             ))}
                           </div>
 
-                          {/* Right side: Autoplaying Short Clips */}
+                          {/* Right side: Short Clips */}
                           {allClips.length > 0 && (
                             <div className="clips-sidebar">
                               <div className="clips-sidebar-header">
@@ -1645,7 +1751,7 @@ export default function Home() {
                                             allowFullScreen
                                           />
                                         ) : directVideoUrl(clip.url) ? (
-                                          <video src={clip.url} autoPlay loop playsInline controls />
+                                          <video src={clip.url} preload="metadata" playsInline controls />
                                         ) : (
                                           <div className="clip-link-preview">
                                             <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -1813,7 +1919,7 @@ export default function Home() {
                           Get all locked days with costs, descriptions, booking contacts &amp; exclusive clips from {vlog.author.handle}.
                         </div>
                         <button className="ulc" onClick={doUnlock}>
-                          Unlock for {vlog.credits} {vlog.credits === 1 ? 'credit' : 'credits'} — ₱{vlog.credits * CREDIT_PESO_RATE}
+                          Unlock for {vlog.credits} {vlog.credits === 1 ? 'credit' : 'credits'} — {fmtCreditPrice(vlog.credits)}
                         </button>
                       </>
                     )}
@@ -2682,7 +2788,7 @@ export default function Home() {
                       <div style={{ marginTop: '8px', fontSize: '12px', lineHeight: '1.6' }}>
                         Total itinerary cost: <strong>₱{totalDayCost.toLocaleString()}</strong><br/>
                         1% creator value: <strong>₱{Math.ceil(totalDayCost * RECOMMENDED_CREDIT_RATE).toLocaleString()}</strong><br/>
-                        ÷ ₱{CREDIT_PESO_RATE} per credit = <strong>{calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}</strong>
+                        ÷ {fmtCreditPrice(1)} per credit = <strong>{calculatedCredits} credit{calculatedCredits > 1 ? 's' : ''}</strong>
                       </div>
                     </div>
                     <div className="credit-ruler">
@@ -2708,7 +2814,7 @@ export default function Home() {
                     <div className="cri">
                       {selectedCredits === 0
                         ? 'Free vlog — great for building your audience.'
-                        : <>At {selectedCredits} credit{selectedCredits > 1 ? 's' : ''} at PHP {selectedCredits * CREDIT_PESO_RATE} per tourist, 80% to you = <strong>PHP {selectedCredits * CREDIT_PESO_RATE * 0.8}</strong>. Est. 50 unlocks/month = <strong>PHP {(selectedCredits * CREDIT_PESO_RATE * 0.8 * 50).toLocaleString()} passive income</strong></>
+                        : <>At {selectedCredits} credit{selectedCredits > 1 ? 's' : ''} at {fmtCreditPrice(selectedCredits)} per tourist, 80% to you = <strong>{fmtProfileMoney(selectedCredits * CREDIT_PESO_RATE * CREATOR_EARNINGS_SHARE)}</strong>. Est. 50 unlocks/month = <strong>{fmtProfileMoney(selectedCredits * CREDIT_PESO_RATE * CREATOR_EARNINGS_SHARE * 50)} passive income</strong></>
                       }
                     </div>
                   </div>
@@ -2802,8 +2908,8 @@ export default function Home() {
                 </button>
               </div>
               <div className="dash-compact-kpis">
-                <div className="dash-mini-kpi"><span>Earnings</span><strong>{fmtProfileMoney(profile?.earnings ?? 4320)}</strong></div>
-                <div className="dash-mini-kpi"><span>Views</span><strong>{((profile?.totalViews || 38400)/1000).toFixed(1)}k</strong></div>
+                <div className="dash-mini-kpi"><span>Earnings</span><strong>{fmtProfileMoney(dashboardSelected.earningsPhp)}</strong></div>
+                <div className="dash-mini-kpi"><span>Views</span><strong>{fmtShortNumber(dashboardSelected.views)}</strong></div>
                 <div className="dash-mini-kpi"><span>Vlogs</span><strong>{myVlogs.length || profile?.vlogCount || 48}</strong></div>
                 <div className="dash-mini-kpi"><span>Avg rating</span><strong>{(profile?.avgRating || 4.8).toFixed(1)}</strong></div>
               </div>
@@ -2855,8 +2961,8 @@ export default function Home() {
                     </button>
                   </div>
                   <div className="dash-compact-kpis">
-                    <div className="dash-mini-kpi"><span>Earnings</span><strong>{fmtProfileMoney(profile?.earnings ?? 4320)}</strong></div>
-                    <div className="dash-mini-kpi"><span>Views</span><strong>{((profile?.totalViews || 38400)/1000).toFixed(1)}k</strong></div>
+                    <div className="dash-mini-kpi"><span>Earnings</span><strong>{fmtProfileMoney(dashboardSelected.earningsPhp)}</strong></div>
+                    <div className="dash-mini-kpi"><span>Views</span><strong>{fmtShortNumber(dashboardSelected.views)}</strong></div>
                     <div className="dash-mini-kpi"><span>Vlogs</span><strong>{myVlogs.length || profile?.vlogCount || 48}</strong></div>
                     <div className="dash-mini-kpi"><span>Avg rating</span><strong>{(profile?.avgRating || 4.8).toFixed(1)}</strong></div>
                   </div>
@@ -2868,18 +2974,18 @@ export default function Home() {
                 <div className="kpig">
                   <div className="kp">
                     <div className="kpl">Earnings</div>
-                    <div className="kpv" style={{ color:'var(--y)' }}>{fmtProfileMoney(profile?.earnings ?? 4320)}</div>
-                    <div className="kpc up">↑ +18%</div>
+                    <div className="kpv" style={{ color:'var(--y)' }}>{fmtProfileMoney(dashboardSelected.earningsPhp)}</div>
+                    <div className="kpc up">{dashboardSelected.fullLabel}</div>
                   </div>
                   <div className="kp">
                     <div className="kpl">Credits</div>
-                    <div className="kpv">{profile?.credits || 432}</div>
-                    <div className="kpc up">↑ +64</div>
+                    <div className="kpv">{dashboardSelected.credits}</div>
+                    <div className="kpc up">{fmtCreditPrice(1)} per credit</div>
                   </div>
                   <div className="kp">
                     <div className="kpl">Views</div>
-                    <div className="kpv">{((profile?.totalViews || 38400)/1000).toFixed(1)}k</div>
-                    <div className="kpc up">↑ +2.1k</div>
+                    <div className="kpv">{fmtShortNumber(dashboardSelected.views)}</div>
+                    <div className="kpc up">{dashboardSelected.unlocks} unlocks</div>
                   </div>
                   <div className="kp">
                     <div className="kpl">Vlogs</div>
@@ -2910,17 +3016,31 @@ export default function Home() {
                 <div className="dashboard-summary-chart" style={{ marginBottom:'22px' }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'11px' }}>
                     <span style={{ fontSize:'14px', fontWeight:600 }}>Monthly earnings</span>
-                    <span style={{ fontSize:'12px', color:'var(--color-text-secondary)' }}>Oct: 86 unlocks</span>
+                    <span style={{ fontSize:'12px', color:'var(--color-text-secondary)' }}>{dashboardSelected.fullLabel}: {fmtProfileMoney(dashboardSelected.earningsPhp)}</span>
+                  </div>
+                  <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+                    <button type="button" className={`dash-range-btn${dashboardMonthIndex == null ? ' active' : ''}`} onClick={() => setDashboardMonthIndex(null)}>12 mo total</button>
+                    <button type="button" className={`dash-range-btn${dashboardMonthIndex === 11 ? ' active' : ''}`} onClick={() => setDashboardMonthIndex(11)}>Current month</button>
                   </div>
                   <div className="ca">
                     <div className="brs">
-                      {[28,40,32,55,47,66,51,76,62,94].map((h, i) => (
-                        <div key={i} className={`bar${i === 9 ? ' hi' : ''}`} style={{ height:`${h}%` }}/>
+                      {dashboardMonthly.map((month, i) => (
+                        <button
+                          key={month.fullLabel}
+                          type="button"
+                          className={`bar${dashboardMonthIndex === i ? ' hi' : ''}`}
+                          style={{ height:`${Math.max(6, Math.round((month.earningsPhp / maxDashboardEarnings) * 100))}%` }}
+                          title={`${month.fullLabel}: ${fmtProfileMoney(month.earningsPhp)} earned`}
+                          aria-label={`${month.fullLabel}: ${fmtProfileMoney(month.earningsPhp)} earned`}
+                          onMouseEnter={() => setDashboardMonthIndex(i)}
+                          onFocus={() => setDashboardMonthIndex(i)}
+                          onClick={() => setDashboardMonthIndex(i)}
+                        />
                       ))}
                     </div>
                     <div className="blbs">
-                      {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct'].map(m => (
-                        <div key={m} className="blb">{m}</div>
+                      {dashboardMonthly.map(m => (
+                        <div key={m.fullLabel} className="blb">{m.label}</div>
                       ))}
                     </div>
                   </div>
@@ -3111,7 +3231,7 @@ export default function Home() {
                           {vlog.credits > 0 && !unlocked && (
                             <div style={{ padding:'12px', background:'var(--yl)', borderRadius:'10px', marginBottom:'14px' }}>
                               <div style={{ fontSize:'13px', fontWeight:600, color:'var(--y1)', marginBottom:'6px' }}>Unlock itinerary</div>
-                              <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · ₱{vlog.credits * CREDIT_PESO_RATE}</div>
+                              <div style={{ fontSize:'12px', color:'var(--y1)', marginBottom:'8px', opacity:0.8 }}>{vlog.credits} credits · {fmtCreditPrice(vlog.credits)}</div>
                               <button className="gi-panel-btn gi-panel-btn-primary" onClick={doUnlock} style={{ background:'var(--y)', color:'var(--y1)', fontSize:'12px', padding:'8px' }}>
                                 Unlock
                               </button>
@@ -3245,7 +3365,7 @@ export default function Home() {
               {activeModalItem.type === 'video' && clipPreviewUrl(activeModalItem.url) ? (
                 <iframe src={clipPreviewUrl(activeModalItem.url) || ''} title={mediaModal.title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
               ) : activeModalItem.type === 'video' && directVideoUrl(activeModalItem.url) ? (
-                <video src={activeModalItem.url} controls autoPlay playsInline />
+                <video src={activeModalItem.url} controls preload="metadata" playsInline />
               ) : activeModalItem.type === 'video' ? (
                 <a className="media-modal-link-preview" href={activeModalItem.url} target="_blank" rel="noopener noreferrer">
                   <span>Open short clip</span>

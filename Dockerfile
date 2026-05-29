@@ -3,17 +3,17 @@
 # Stage 1: Install deps
 FROM node:20-alpine AS deps
 WORKDIR /app
-ENV PUPPETEER_SKIP_DOWNLOAD=1
 ENV NPM_CONFIG_FETCH_RETRIES=5
 ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000
 ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
+ENV NPM_CONFIG_PROGRESS=false
 
 # Copy package files
 COPY package.json package-lock.json* ./
 
 # Install dependencies with optimizations
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --ignore-scripts --no-audit --no-fund --loglevel=warn
+    npm ci --ignore-scripts --no-audit --no-fund --prefer-offline --timing --loglevel=notice
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
