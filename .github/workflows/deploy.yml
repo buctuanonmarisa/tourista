@@ -11,19 +11,6 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Copy project to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: ".dockerignore,Dockerfile,entrypoint.sh,next.config.js,package.json,package-lock.json,prisma,public,src,tsconfig.json,postcss.config.js,tailwind.config.js,next-env.d.ts"
-          target: "/home/ec2-user/tourista"
-          rm: true
-
       - name: Build and restart app
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -38,7 +25,22 @@ jobs:
           script: |
             set -eu
 
-            cd /home/ec2-user/tourista
+            APP_DIR="/home/ec2-user/tourista"
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+
+            if ! command -v git >/dev/null 2>&1; then
+              sudo yum install -y git || sudo dnf install -y git
+            fi
+
+            if [ -d "$APP_DIR/.git" ]; then
+              cd "$APP_DIR"
+              git fetch --depth 1 origin main
+              git reset --hard origin/main
+            else
+              rm -rf "$APP_DIR"
+              git clone --depth 1 --branch main "$REPO_URL" "$APP_DIR"
+              cd "$APP_DIR"
+            fi
 
             if [ -z "${DATABASE_URL:-}" ]; then
               echo "DATABASE_URL GitHub secret is missing."
