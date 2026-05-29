@@ -21,6 +21,7 @@ type GeneratedItineraryDay = {
   tips?: string
   estimated_cost_php?: string | number
   cost?: string | number
+  media?: Array<{ url: string; type: 'image' | 'video' }>
 }
 
 type YouTubeMetadata = {
@@ -71,6 +72,7 @@ const stripToJson = (value: string) => {
 const toDigits = (value: unknown) => String(value || '0').replace(/[^\d]/g, '')
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const TRANSCRIPT_PROMPT_LIMIT = 12000
+const PHOTOS_PER_ITINERARY_DAY = 6
 
 const htmlDecode = (value: string) =>
   value
@@ -194,6 +196,70 @@ function extractVideoId(url: string): string | null {
   }
 }
 
+const stableMediaLock = (value: string) =>
+  value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+
+const splitPlaces = (value: unknown) =>
+  String(value || '')
+    .split(',')
+    .map(item => compactWhitespace(item))
+    .filter(Boolean)
+
+const mediaKeywords = (value: string) =>
+  compactWhitespace(value.replace(/[^\w\s,-]/g, ' '))
+    .split(/[\s,]+/)
+    .filter(word => word.length > 2)
+    .slice(0, 8)
+    .join(',')
+
+const mediaSearchTerm = (day: GeneratedItineraryDay, fallbackPlace: string, country: string) =>
+  compactWhitespace([
+    day.activity,
+    day.highlights,
+    fallbackPlace,
+    country,
+    'travel',
+  ].filter(Boolean).join(' '))
+
+const destinationPhotoUrl = (term: string, place: string, country: string, dayIndex: number, photoIndex: number) => {
+  const photoThemes = ['landmark', 'street', 'food', 'view', 'market', 'nature']
+  const query = mediaKeywords(`${place},${country},${photoThemes[photoIndex % photoThemes.length]},${term},travel`)
+  return `https://loremflickr.com/1200/800/${encodeURIComponent(query)}/all?lock=${stableMediaLock(`${query}-${dayIndex}-${photoIndex}`)}`
+}
+
+const videoFrameStillUrls = (videoId: string, dayIndex: number) => {
+  const stills = ['hqdefault', '1', '2', '3']
+  const still = stills[dayIndex % stills.length]
+  return [`https://img.youtube.com/vi/${videoId}/${still}.jpg`]
+}
+
+// Build a richer media set for each generated day without embedding unavailable search/video results.
+function generateItineraryMedia(
+  day: GeneratedItineraryDay,
+  index: number,
+  videoId: string,
+  country: string,
+  cities: unknown,
+): Array<{ url: string; type: 'image' | 'video' }> {
+  const places = splitPlaces(cities)
+  const fallbackPlace = places[index % Math.max(places.length, 1)] || country
+  const term = mediaSearchTerm(day, fallbackPlace, country)
+  const photos = Array.from({ length: PHOTOS_PER_ITINERARY_DAY }, (_, photoIndex) =>
+    destinationPhotoUrl(term, fallbackPlace, country, index, photoIndex),
+  )
+  const videoStills = videoFrameStillUrls(videoId, index)
+
+  const seen = new Set<string>()
+  return [
+    ...videoStills.map(url => ({ url, type: 'image' as const })),
+    ...photos.map(url => ({ url, type: 'image' as const })),
+  ].filter(item => {
+    if (seen.has(item.url)) return false
+    seen.add(item.url)
+    return true
+  })
+}
+
 // Fetch YouTube video metadata using oEmbed API (no API key needed)
 async function fetchYouTubeMetadata(videoId: string) {
   const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
@@ -204,10 +270,11 @@ async function fetchYouTubeMetadata(videoId: string) {
   }
 
   const data = await response.json()
+  // Always use maxresdefault for highest quality thumbnail
   const metadata: YouTubeMetadata = {
     title: data.title || '',
     author: data.author_name || '',
-    thumbnailUrl: data.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
   }
 
   try {
@@ -297,10 +364,10 @@ TASK: Generate a JSON response with these exact fields:
     {
       "day": 1,
       "activity": "Specific main activity for this day",
-      "highlights": "3-4 specific attractions, moments, or shots from this day",
-      "food_tips": "Where/what to eat and realistic meal advice for this day",
-      "getting_there": "Transport route, how to move around, and fare guidance",
-      "tips": "Practical travel, booking, timing, and budget tips",
+      "highlights": "✨ Use emojis! 3-4 specific attractions, moments, or shots from this day. Be descriptive and exciting. Example: '🏛️ Explored the ancient pyramids at sunrise, 🐪 camel ride through the desert, 📸 sunset at the Sphinx'",
+      "food_tips": "🍜 Use emojis! Where/what to eat and realistic meal advice. Include specific dishes, restaurant types, and price ranges. Example: '🥙 Try koshari at local street vendors (₱150-200), 🍰 Must-try: Om Ali dessert at Naguib Mahfouz Cafe, 🥤 Fresh sugarcane juice everywhere (₱50)'",
+      "getting_there": "🚌 Use emojis! Transport route, how to move around, and fare guidance. Be specific about transport types and costs. Example: '🚕 Uber from airport to hotel (₱800-1000), 🚇 Metro is cheapest (₱20/ride), 🚌 Day tour buses (₱1500 with guide)'",
+      "tips": "💡 Use emojis! Practical travel, booking, timing, and budget tips with specific advice. Example: '💰 Bring cash - many places don't take cards, 🌅 Visit pyramids early morning to avoid crowds, 🎫 Book tours online for 20% discount, 🧴 Sunscreen is essential!'",
       "estimated_cost_php": "Day cost estimate in PHP (number only)"
     }
   ]
@@ -310,6 +377,10 @@ IMPORTANT:
 - Respond ONLY with valid JSON (no markdown, no code blocks, no backticks)
 - Use realistic cost estimates based on the destination
 - Treat the transcript as the strongest source when it is available
+- Build the itinerary from the vlog's actual sequence. If the video says Day 1, put those captured moments, places, food, transport, and tips in Day 1. If day labels are not explicit, infer a sensible order from the route and note what travelers should verify.
+- Make every itinerary field concise, specific, and exciting: roughly 12-24 words for highlights, food_tips, getting_there, and tips.
+- Use several relevant emojis in every itinerary detail field, with the first character being an emoji.
+- Include concrete vlog-based details, but avoid long paragraphs. Prefer one punchy sentence per field.
 - Extract actual locations mentioned in the transcript or metadata only
 - Do not claim specific attractions, restaurants, transport routes, or events unless they are supported by the transcript or metadata
 - If the transcript and metadata are too vague, keep the itinerary broad and say what the traveler should verify
@@ -319,7 +390,14 @@ IMPORTANT:
 - Day 1 and Day 2 should be free-preview quality; later days can be premium detail
 - Include food_tips, getting_there, tips, highlights, activity, and estimated_cost_php for every day
 - Keep descriptions engaging and informative
-- If location is unclear, choose the most likely country only when the title, description, or keywords support it; otherwise use "Philippines" but keep cities blank
+- **CRITICAL: The "country" field MUST match the actual country shown in the video. Analyze the title, description, keywords, and transcript carefully to identify the correct country. For example, if the video is about Egypt, the country MUST be "Egypt", NOT "Philippines". Only use "Philippines" as a fallback if no country can be determined from the video content.**
+- If the country is clearly mentioned in the title (e.g., "Egypt Travel Guide"), use that country
+- The cities field should contain cities from the identified country, not from a different country
+- **EMOJIS ARE MANDATORY**: Every highlights, food_tips, getting_there, and tips field MUST start with relevant emojis and include emojis throughout to make content visually appealing
+- **BE SPECIFIC AND REALISTIC**: Include actual prices, specific locations, real transport options, and practical advice based on the destination
+- **MAKE IT ENGAGING**: Write like a travel blogger sharing insider tips, not a generic travel guide
+- Use conversational language with personality (e.g., "Don't miss...", "Pro tip:", "Trust me on this...")
+- Include time-saving tips, money-saving hacks, and local secrets when possible
 - Ensure all fields are present in the response`
 
   let lastError: unknown
@@ -365,11 +443,31 @@ const normalizeItinerary = (aiResponse: any, duration: number): GeneratedItinera
   }))
 }
 
+const conciseDetail = (value: unknown, fallbackEmoji: string) => {
+  const text = compactWhitespace(String(value || ''))
+  if (!text) return ''
+
+  const withoutDuplicateEmoji = text.startsWith(fallbackEmoji) ? text : `${fallbackEmoji} ${text}`
+  const words = withoutDuplicateEmoji.split(' ')
+  if (words.length <= 28) return withoutDuplicateEmoji
+
+  return `${words.slice(0, 28).join(' ').replace(/[,.!?;:]*$/, '')}.`
+}
+
 // Validate and clean AI response
-function validateAIResponse(aiResponse: any, metadata: { title: string; thumbnailUrl: string }) {
-  const country = FALLBACK_COUNTRIES.includes(aiResponse.country)
-    ? aiResponse.country
-    : 'Philippines'
+function validateAIResponse(aiResponse: any, metadata: { title: string; thumbnailUrl: string }, videoId: string) {
+  // Try to extract country from video title if AI response is invalid
+  let country = aiResponse.country
+
+  // Check if the AI-provided country is valid
+  if (!FALLBACK_COUNTRIES.includes(country)) {
+    // Try to extract country from title
+    const titleLower = metadata.title.toLowerCase()
+    const foundCountry = FALLBACK_COUNTRIES.find(c =>
+      titleLower.includes(c.toLowerCase())
+    )
+    country = foundCountry || 'Philippines'
+  }
 
   const vibes = Array.isArray(aiResponse.travel_vibes)
     ? aiResponse.travel_vibes.filter((v: string) => FALLBACK_VIBES.includes(v)).slice(0, 3)
@@ -377,16 +475,18 @@ function validateAIResponse(aiResponse: any, metadata: { title: string; thumbnai
   const vibeString = vibes.join(',')
 
   const duration = clamp(parseInt(aiResponse.estimated_days) || 3, 1, 30)
+
   const itinerary = normalizeItinerary(aiResponse, duration)
     .slice(0, Math.min(duration, 10))
     .map((day, index) => ({
       day: Number(day.day) || index + 1,
       activity: String(day.activity || `Day ${index + 1}`).slice(0, 180),
-      highlights: String(day.highlights || ''),
-      foodTips: String(day.foodTips || day.food_tips || ''),
-      gettingThere: String(day.gettingThere || day.getting_there || ''),
-      tips: String(day.tips || ''),
+      highlights: conciseDetail(day.highlights, '✨'),
+      foodTips: conciseDetail(day.foodTips || day.food_tips, '🍜'),
+      gettingThere: conciseDetail(day.gettingThere || day.getting_there, '🚕'),
+      tips: conciseDetail(day.tips, '💡'),
       cost: toDigits(day.cost || day.estimated_cost_php),
+      media: generateItineraryMedia(day, index, videoId, country, aiResponse.cities),
     }))
 
   const itineraryTotal = itinerary.reduce((sum, day) => sum + (parseInt(day.cost) || 0), 0)
@@ -473,7 +573,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        data: validateAIResponse(aiResponse, metadata),
+        data: validateAIResponse(aiResponse, metadata, videoId),
       },
       { status: 200 },
     )

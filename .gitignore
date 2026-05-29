@@ -13,6 +13,9 @@ tsconfig.tsbuildinfo
 # Design references
 pleasant-pages-main/
 
+# Product Pitch - Challenge Submission (Internal Only)
+product-pitch/
+
 .claude/
 .codex/
 AGENTS.md

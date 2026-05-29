@@ -21,14 +21,21 @@ const encodedTravelQuery = (vlog: VlogLinkSeed) => encodeURIComponent(travelQuer
 const coverPhotoUrl = (vlog: VlogLinkSeed) =>
   `https://loremflickr.com/1200/800/${encodeURIComponent(vlog.location)},${encodeURIComponent(vlog.country)},travel/all?lock=${stableImageLock(vlog.title)}`
 const YOUTUBE_VIDEO_IDS: Record<string, string> = {
-  'Siargao Island Paradise: 5 Days of Surfing & Island Hopping': 'oM43NeULJwo',
-  'Tokyo on a Budget: 4 Days of Street Food & Hidden Gems': 'RY1CAaGslyc',
-  'Phuket Paradise: Beaches, Parties & Island Adventures': 'GqeiO6rHPZE',
-  'Hanoi Street Food Adventure: 3 Days Eating Like a Local': 'u9VswvjJtfI',
-  'Ubud Wellness Retreat: 7 Days of Yoga, Temples & Rice Terraces': 'TRw-JEZuKPY',
-  'El Nido Island Hopping: 4 Days in Paradise': 'QYxzYrCNf4Q',
-  'Cebu City & Oslob: Whale Sharks & Canyoneering': 'y70z3C6nlEI',
-  'Kyoto Temple Hopping: 5 Days of Zen & Cherry Blossoms': '3gX-umzVl9s',
+  'Siargao Island Paradise: 5 Days of Surfing & Island Hopping': 'LdKdP6hl6IE',
+  'Tokyo on a Budget: 4 Days of Street Food & Hidden Gems': '53r0juQgcs4',
+  'Phuket Paradise: Beaches, Parties & Island Adventures': 'RYwzrKxCv1k',
+  'Hanoi Street Food Adventure: 3 Days Eating Like a Local': 'RYwzrKxCv1k',
+  'Ubud Wellness Retreat: 7 Days of Yoga, Temples & Rice Terraces': 'vYbKn1uE3zo',
+  'El Nido Island Hopping: 4 Days in Paradise': 'LdKdP6hl6IE',
+  'Cebu City & Oslob: Whale Sharks & Canyoneering': 'LdKdP6hl6IE',
+  'Kyoto Temple Hopping: 5 Days of Zen & Cherry Blossoms': '53r0juQgcs4',
+  'Bangkok Street Food & Temples: 4 Days in the City': 'RYwzrKxCv1k',
+  'Paris Family First-Timers: Museums, Parks & Easy Food Stops': 'VLpo8wz2vAU',
+  'Rome Ancient Streets: Colosseum, Trastevere & Pasta Nights': 'xVAvjSiXdhM',
+  'Santorini Island Sunsets: Villages, Beaches & Caldera Views': 'xl5mrBDK6Vs',
+  'New York Photo Walk: 3 Days of Skyline & Street Shots': 'UTLrEKGu9Vo',
+  'Banff National Park: Lakes, Wildlife & Mountain Views': 'KzO5yMHLOhc',
+  'Cape Town Nature Loop: Table Mountain, Penguins & Winelands': 'qZlUwzE1imE',
 }
 const youtubeTravelUrl = (vlog: VlogLinkSeed) =>
   `https://www.youtube.com/watch?v=${YOUTUBE_VIDEO_IDS[vlog.title] || 'sWEBl9A4lNY'}`
@@ -381,17 +388,31 @@ async function main() {
         status: 'live',
         authorId: user.id,
         itinerary: template.itinerary ? {
-          create: template.itinerary.map((day: any) => ({
-            day: day.day,
-            activity: day.activity,
-            cost: day.cost,
-            locked: day.locked,
-            description: day.description,
-            highlights: day.highlights,
-            foodTips: day.foodTips,
-            gettingThere: day.gettingThere,
-            tips: day.tips,
-          })),
+          create: template.itinerary.map((day: any, dayIdx: number) => {
+            const sampleVideos = [
+              'https://www.youtube.com/watch?v=LdKdP6hl6IE',
+              'https://www.youtube.com/watch?v=53r0juQgcs4',
+              'https://www.youtube.com/watch?v=RYwzrKxCv1k',
+              'https://www.youtube.com/watch?v=vYbKn1uE3zo',
+              'https://www.youtube.com/watch?v=VLpo8wz2vAU',
+              'https://www.youtube.com/watch?v=xVAvjSiXdhM',
+              'https://www.youtube.com/watch?v=xl5mrBDK6Vs',
+            ]
+            return {
+              day: day.day,
+              activity: day.activity,
+              cost: day.cost,
+              locked: day.locked,
+              description: day.description,
+              highlights: day.highlights,
+              foodTips: day.foodTips,
+              gettingThere: day.gettingThere,
+              tips: day.tips,
+              // Add video clips to some days (60% chance)
+              mediaUrl: Math.random() > 0.4 ? sampleVideos[dayIdx % sampleVideos.length] : null,
+              mediaType: Math.random() > 0.4 ? 'video' : null,
+            }
+          }),
         } : undefined,
       },
     })
@@ -580,6 +601,18 @@ async function main() {
     addGuide('Istanbul', 'Four-day Istanbul cultural route linking historic mosques, bazaars, ferry rides, and food neighborhoods across two continents.', ['Sultanahmet: Hagia Sophia, Blue Mosque, and Basilica Cistern', 'Grand Bazaar, Spice Bazaar, and Eminonu street food', 'Bosphorus ferry, Galata, and Karakoy cafes', 'Kadikoy market, Moda waterfront, and final hammam'], 'Simit, kebabs, meze, baklava, Turkish coffee, fish sandwiches, and menemen.', 'Use Istanbulkart for trams, metro, ferries, and buses.', 'Dress modestly for mosques and visit bazaars earlier for calmer browsing.')
 
     const guide = locationGuides[data.location]
+
+    // Sample video URLs for demonstration
+    const sampleVideos = [
+      'https://www.youtube.com/watch?v=LdKdP6hl6IE',
+      'https://www.youtube.com/watch?v=53r0juQgcs4',
+      'https://www.youtube.com/watch?v=RYwzrKxCv1k',
+      'https://www.youtube.com/watch?v=vYbKn1uE3zo',
+      'https://www.youtube.com/watch?v=VLpo8wz2vAU',
+      'https://www.youtube.com/watch?v=xVAvjSiXdhM',
+      'https://www.youtube.com/watch?v=xl5mrBDK6Vs',
+    ]
+
     if (!guide) {
       return Array.from({ length: data.duration }, (_, dayIdx) => ({
         day: dayIdx + 1,
@@ -591,6 +624,9 @@ async function main() {
         foodTips: `Try local restaurants near the day ${dayIdx + 1} route instead of tourist-only chains.`,
         gettingThere: `Use the most common local transport around ${data.location}; budget extra time at peak hours.`,
         tips: `Keep this day flexible for weather, queues, and local opening hours.`,
+        // Add video clips to some days (60% chance)
+        mediaUrl: Math.random() > 0.4 ? sampleVideos[dayIdx % sampleVideos.length] : null,
+        mediaType: Math.random() > 0.4 ? 'video' : null,
       }))
     }
 
@@ -604,6 +640,9 @@ async function main() {
       foodTips: day.foodTips,
       gettingThere: day.gettingThere,
       tips: day.tips,
+      // Add video clips to some days (60% chance)
+      mediaUrl: Math.random() > 0.4 ? sampleVideos[dayIdx % sampleVideos.length] : null,
+      mediaType: Math.random() > 0.4 ? 'video' : null,
     }))
   }
 

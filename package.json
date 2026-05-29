@@ -11,6 +11,10 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:clips": "tsx prisma/seed-itinerary-clips.ts",
+    "db:seed:tourme-clips": "tsx prisma/seed-tourme-area-short-clips.ts",
+    "db:seed:tourme-real": "tsx prisma/seed-tourme-real-clips.ts",
+    "db:repair:tourme": "tsx prisma/repair-tourme-data.ts",
+    "db:cleanup:tourme": "tsx prisma/cleanup-and-reseed-tourme.ts",
     "db:reset": "prisma migrate reset --force && tsx prisma/seed.ts",
     "postinstall": "prisma generate"
   },

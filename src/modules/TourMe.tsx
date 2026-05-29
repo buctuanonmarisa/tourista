@@ -186,6 +186,9 @@ const fallbackAuthor: VlogAuthor = {
   verified: true,
 }
 
+const TOUR_ME_TRAVEL_DURATION_MS = 3000
+const TOUR_ME_TRAVEL_DURATION_SECONDS = TOUR_ME_TRAVEL_DURATION_MS / 1000
+
 interface CuratedCountryStop {
   country: string
   name: string
@@ -197,8 +200,8 @@ interface CuratedCountryStop {
 }
 
 const CURATED_COUNTRY_STOPS: CuratedCountryStop[] = [
-  { country: 'Philippines', name: 'El Nido', lat: 11.17307562502276, lng: 119.3950475274839, streetLat: 11.1801, streetLng: 119.3919, reason: 'Island lagoons, limestone cliffs, and clear water' },
-  { country: 'Japan', name: 'Kyoto', lat: 34.97131910400563, lng: 135.77866553169181, streetLat: 35.0037, streetLng: 135.7788, reason: 'Temples, old streets, gardens, and seasonal beauty' },
+  { country: 'Philippines', name: 'El Nido', lat: 11.17307562502276, lng: 119.3950475274839, streetLat: 11.1797, streetLng: 119.3908, reason: 'Island lagoons, limestone cliffs, and clear water' },
+  { country: 'Japan', name: 'Kyoto', lat: 34.97131910400563, lng: 135.77866553169181, streetLat: 34.9674, streetLng: 135.7727, reason: 'Temples, old streets, gardens, and seasonal beauty' },
   { country: 'Thailand', name: 'Bangkok', lat: 13.753597290416279, lng: 100.49182275558415, streetLat: 13.7525, streetLng: 100.4941, reason: 'Street food, temples, markets, and nightlife' },
   { country: 'Indonesia', name: 'Bali', lat: -8.590959828681374, lng: 115.08592107881513, streetLat: -8.5069, streetLng: 115.2625, reason: 'Beaches, rice terraces, temples, and surf culture' },
   { country: 'France', name: 'Paris', lat: 48.859697126192614, lng: 2.2943954674158236, streetLat: 48.8584, streetLng: 2.2945, reason: 'Museums, cafes, architecture, and classic city walks' },
@@ -206,7 +209,7 @@ const CURATED_COUNTRY_STOPS: CuratedCountryStop[] = [
   { country: 'Greece', name: 'Santorini', lat: 36.41909126407468, lng: 25.43215848592153, streetLat: 36.4618, streetLng: 25.3753, reason: 'Caldera views, white villages, and sunset viewpoints' },
   { country: 'USA', name: 'New York City', lat: 40.58698870663118, lng: -73.94609869695802, streetLat: 40.758, streetLng: -73.9855, reason: 'Skyline walks, food, museums, and city energy' },
   { country: 'Canada', name: 'Banff', lat: 51.50475402823146, lng: -115.92736956972638, streetLat: 51.1784, streetLng: -115.5708, reason: 'Turquoise lakes, mountain trails, and wildlife views' },
-  { country: 'South Africa', name: 'Cape Town', lat: -33.891354246580676, lng: 18.42668549225774, streetLat: -33.9628, streetLng: 18.4098, reason: 'Table Mountain, coast roads, penguins, and wine country' },
+  { country: 'South Africa', name: 'Cape Town', lat: -33.891354246580676, lng: 18.42668549225774, streetLat: -33.9258, streetLng: 18.4232, reason: 'Table Mountain, coast roads, penguins, and wine country' },
 ]
 
 const makeTourAudioDataUrl = () => {
@@ -359,7 +362,7 @@ const youtubeIdFromUrl = (url?: string | null) => {
 
 const youtubeThumbForUrl = (url?: string | null) => {
   const id = youtubeIdFromUrl(url)
-  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : ''
+  return id ? `https://img.youtube.com/vi/${id}/maxresdefault.jpg` : ''
 }
 
 const getEmbedUrl = (url: string) => {
@@ -396,14 +399,14 @@ const mapTilesForCoords = (lat: number, lng: number) => {
   })))
 }
 
-const worldMapTiles = Array.from({ length: 8 }, (_, index) => {
-  const x = index % 4
-  const y = Math.floor(index / 4) + 1
+const worldMapTiles = Array.from({ length: 4 }, (_, index) => {
+  const x = index % 2
+  const y = Math.floor(index / 2)
   return {
-    key: `world-2-${x}-${y}`,
-    url: `https://tile.openstreetmap.org/2/${x}/${y}.png`,
-    left: `${x * 25}%`,
-    top: `${(y - 1) * 50}%`,
+    key: `world-1-${x}-${y}`,
+    url: `https://tile.openstreetmap.org/1/${x}/${y}.png`,
+    left: `${x * 50}%`,
+    top: `${y * 50}%`,
   }
 })
 
@@ -456,6 +459,13 @@ const routeCurvePath = (from: TourDestination, to: TourDestination, index: numbe
   return `M ${from.pin.x.toFixed(2)} ${from.pin.y.toFixed(2)} Q ${controlX.toFixed(2)} ${controlY.toFixed(2)} ${to.pin.x.toFixed(2)} ${to.pin.y.toFixed(2)}`
 }
 
+const conciseDestinationCopy = (destination?: TourDestination | null) => {
+  if (!destination) return 'A curated Tourista stop with creator clips and map context.'
+  const base = destination.reason || destination.description || `${destination.name} is a curated Tourista destination.`
+  const firstSentence = base.split(/(?<=[.!?])\s+/)[0] || base
+  return firstSentence.length > 118 ? `${firstSentence.slice(0, 115).trim()}...` : firstSentence
+}
+
 const PersonAvatar = ({ small = false }: { small?: boolean }) => (
   <svg className={small ? 'tour-person small' : 'tour-person'} viewBox="0 0 120 120" aria-hidden="true">
     <path className="hood-shadow" d="M20 112c6-24 23-36 40-36s34 12 40 36H20Z" />
@@ -490,19 +500,27 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const [travelCue, setTravelCue] = useState<{ key: number; direction: 1 | -1; from: string; to: string; fromDest: TourDestination; toDest: TourDestination } | null>(null)
   const [currentClipIndex, setCurrentClipIndex] = useState(0)
   const travelTimerRef = useRef<number | null>(null)
+  const lastAudioOpenRef = useRef(false)
   const clipsContainerRef = useRef<HTMLDivElement>(null)
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
+  const videoEndHandlersRef = useRef<Map<string, () => void>>(new Map())
   const observerRef = useRef<IntersectionObserver | null>(null)
 
   const destinations = useMemo<TourDestination[]>(() => {
-    const bestVlogByCountry = new Map<string, TourMeVlog>()
-    ;[...vlogs].sort((a, b) => destinationScore(b) - destinationScore(a)).forEach(vlog => {
-      const country = (vlog.country || vlog.location.split(',').pop() || '').trim().toLowerCase()
-      if (country && !bestVlogByCountry.has(country)) bestVlogByCountry.set(country, vlog)
-    })
+    const rankedVlogs = [...vlogs].sort((a, b) => destinationScore(b) - destinationScore(a))
 
     return CURATED_COUNTRY_STOPS.map((stop, index) => {
-      const vlog = bestVlogByCountry.get(stop.country.toLowerCase())
+      const stopKey = normalizeLocationKey(stop.name)
+      const countryKey = normalizeLocationKey(stop.country)
+      const vlog =
+        rankedVlogs.find(candidate => {
+          const text = normalizeLocationKey(`${candidate.title} ${candidate.location} ${candidate.country || ''}`)
+          return text.includes(stopKey) && text.includes(countryKey)
+        }) ||
+        rankedVlogs.find(candidate => {
+          const text = normalizeLocationKey(`${candidate.location} ${candidate.country || ''}`)
+          return text.includes(countryKey)
+        })
       // Always use the curated coordinates from CURATED_COUNTRY_STOPS
       const coords = { lat: stop.lat, lng: stop.lng }
       return {
@@ -519,37 +537,22 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
         views: vlog?.views || 0,
         likes: vlog?.likes || 0,
         author: vlog?.author || fallbackAuthor,
-        description: vlog?.description || stop.reason,
+        description: stop.reason,
         coverImage: vlog?.coverImage || youtubeThumbForUrl(vlog?.youtubeUrl),
         youtubeUrl: vlog?.youtubeUrl,
         pin: pinForCoords(coords),
         rank: index + 1,
         score: vlog ? destinationScore(vlog) : CURATED_COUNTRY_STOPS.length - index,
-        reason: vlog ? reasonForDestination(vlog) : stop.reason,
+        reason: stop.reason,
       }
     })
   }, [vlogs])
-  const routeConnections = useMemo(() => {
-    const ranked = destinations.slice(0, 10)
-    return ranked.slice(0, -1).map((from, index) => {
-      const to = ranked[index + 1]
-      return {
-        key: `${from.id}-${to.id}`,
-        path: routeCurvePath(from, to, index),
-        accent: index % 3 === 1 ? 'green' : 'red',
-      }
-    })
-  }, [destinations])
-  const longRoutePath = useMemo(() => {
-    const usa = destinations.find(destination => destination.rank === 8)
-    const southAfrica = destinations.find(destination => destination.rank === 10)
-    if (!usa || !southAfrica) return ''
-    return routeCurvePath(usa, southAfrica, 10)
-  }, [destinations])
-
   const topDestination = destinations[0]
   const selectedDestination = destinations.find(destination => destination.id === vlogId) || topDestination
   const displayedDestination = stage === 'world' ? topDestination : selectedDestination
+  const displayedDescription = stage === 'world'
+    ? 'A 10-stop world route built from Tourista creator recommendations. Start at the first stop, then follow each pin in order.'
+    : conciseDestinationCopy(selectedDestination)
   const itinerary = detail && selectedDestination && detail.id === selectedDestination.id ? detail.itinerary : []
   const mapTarget = selectedDestination || { lat: 14.5995, lng: 120.9842 }
   const mapTiles = mapTilesForCoords(mapTarget.lat, mapTarget.lng)
@@ -584,6 +587,19 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
       })),
   )
   const displayedAreaClips = areaClips.length ? areaClips : fallbackAreaClips
+
+  const scrollToClipIndex = useCallback((index: number) => {
+    const container = clipsContainerRef.current
+    if (!container || !displayedAreaClips.length) return
+    const boundedIndex = (index + displayedAreaClips.length) % displayedAreaClips.length
+    const clipElements = container.querySelectorAll('.tour-tiktok-clip')
+    const nextElement = clipElements[boundedIndex] as HTMLElement | undefined
+    if (nextElement) {
+      nextElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setCurrentClipIndex(boundedIndex)
+      setClipId(displayedAreaClips[boundedIndex].id)
+    }
+  }, [displayedAreaClips])
 
   const loadAreaClips = useCallback(async (destination: TourDestination) => {
     try {
@@ -626,10 +642,8 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const playNextClip = useCallback(() => {
     if (!displayedAreaClips.length) return
     const currentIndex = displayedAreaClips.findIndex(clip => clip.id === clipId)
-    const nextIndex = (currentIndex + 1) % displayedAreaClips.length
-    const nextClip = displayedAreaClips[nextIndex]
-    setClipId(nextClip.id)
-  }, [clipId, displayedAreaClips])
+    scrollToClipIndex(currentIndex + 1)
+  }, [clipId, displayedAreaClips, scrollToClipIndex])
 
   const moveDestination = (direction: 1 | -1) => {
     if (!destinations.length || !selectedDestination) return
@@ -653,7 +667,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     setMapMode('map')
     setStage('world')
 
-    // After animation, switch to the new destination with full details
+    // After the travel animation, switch to the new destination with full details.
     travelTimerRef.current = window.setTimeout(() => {
       setClipId('')
       setDetail(null)
@@ -663,12 +677,12 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
       setStage('place')
       setTravelCue(null)
       travelTimerRef.current = null
-    }, 4200)
+    }, TOUR_ME_TRAVEL_DURATION_MS)
   }
 
   useEffect(() => {
     if (!travelCue) return
-    const timer = window.setTimeout(() => setTravelCue(null), 4500)
+    const timer = window.setTimeout(() => setTravelCue(null), TOUR_ME_TRAVEL_DURATION_MS)
     return () => window.clearTimeout(timer)
   }, [travelCue])
 
@@ -677,6 +691,14 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
       if (travelTimerRef.current) window.clearTimeout(travelTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (open && !lastAudioOpenRef.current) {
+      playTourMeIntroAudio()
+      lastAudioOpenRef.current = true
+    }
+    if (!open) lastAudioOpenRef.current = false
+  }, [open])
 
   useEffect(() => {
     if (!destinations.length) return
@@ -721,8 +743,9 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
             }
           })
 
-          // Play this video
           if (video) {
+            video.muted = false
+            video.volume = 1
             video.play().catch(() => {
               // Autoplay might be blocked, user needs to interact first
             })
@@ -743,6 +766,10 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
       })
     }, options)
 
+    clipsContainerRef.current?.querySelectorAll('.tour-tiktok-clip').forEach(clip => {
+      observerRef.current?.observe(clip)
+    })
+
     return () => {
       if (observerRef.current) {
         observerRef.current.disconnect()
@@ -750,39 +777,59 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     }
   }, [displayedAreaClips, stage])
 
+  useEffect(() => {
+    if (!displayedAreaClips.length || stage !== 'place') return
+
+    const handleYoutubeMessage = (event: MessageEvent) => {
+      if (typeof event.data !== 'string') return
+      if (!String(event.origin).includes('youtube.com')) return
+
+      try {
+        const data = JSON.parse(event.data)
+        if (data.event === 'onStateChange' && data.info === 0) {
+          const currentIndex = displayedAreaClips.findIndex(clip => clip.id === clipId)
+          scrollToClipIndex(currentIndex + 1)
+        }
+      } catch {
+        /* Ignore unrelated player messages. */
+      }
+    }
+
+    window.addEventListener('message', handleYoutubeMessage)
+    return () => window.removeEventListener('message', handleYoutubeMessage)
+  }, [clipId, displayedAreaClips, scrollToClipIndex, stage])
+
   // Auto-advance to next clip when video ends
   useEffect(() => {
     const handleVideoEnd = (clipId: string) => {
       const currentIndex = displayedAreaClips.findIndex(c => c.id === clipId)
-      const nextIndex = (currentIndex + 1) % displayedAreaClips.length
-
-      // Scroll to next clip
-      const container = clipsContainerRef.current
-      if (container) {
-        const clipElements = container.querySelectorAll('.tour-tiktok-clip')
-        const nextElement = clipElements[nextIndex] as HTMLElement
-        if (nextElement) {
-          nextElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
-      }
+      scrollToClipIndex(currentIndex + 1)
     }
 
+    const videoRefsMap = videoRefs.current
+    const videoEndHandlersMap = videoEndHandlersRef.current
+
+    videoEndHandlersMap.forEach((handler, clipId) => {
+      const video = videoRefsMap.get(clipId)
+      if (video) video.removeEventListener('ended', handler)
+    })
+    videoEndHandlersMap.clear()
+
     // Add ended listeners to all videos
-    videoRefs.current.forEach((video, clipId) => {
+    videoRefsMap.forEach((video, clipId) => {
       const handler = () => handleVideoEnd(clipId)
       video.addEventListener('ended', handler)
-      video.dataset.endHandler = 'attached'
+      videoEndHandlersMap.set(clipId, handler)
     })
 
     return () => {
-      videoRefs.current.forEach((video) => {
-        if (video.dataset.endHandler) {
-          video.removeEventListener('ended', () => {})
-          delete video.dataset.endHandler
-        }
+      videoEndHandlersMap.forEach((handler, clipId) => {
+        const video = videoRefsMap.get(clipId)
+        if (video) video.removeEventListener('ended', handler)
       })
+      videoEndHandlersMap.clear()
     }
-  }, [displayedAreaClips])
+  }, [displayedAreaClips, scrollToClipIndex])
 
   if (!open) return null
 
@@ -795,7 +842,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
               <div className="tour-globe" aria-hidden="true">
                 <div className="tour-globe-map">
                   {[0, 1].map(copy => (
-                    <div key={copy} className="tour-globe-strip" style={{ left: `${copy * 100}%` }}>
+                    <div key={copy} className="tour-globe-strip" style={{ left: `${copy * 100}%`, right: 'auto', width: '100%' }}>
                       {worldMapTiles.map(tile => <img key={`${copy}-${tile.key}`} src={tile.url} style={{ left: tile.left, top: tile.top }} alt="" loading="eager" />)}
                     </div>
                   ))}
@@ -807,36 +854,25 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
               <svg className="tour-world-route" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                 <defs>
                   <marker id="tourRouteArrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#e53935" />
+                    <path d="M 0 1.5 L 8 5 L 0 8.5" fill="none" stroke="#ef4444" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
                   </marker>
                   <marker id="tourRouteArrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#22c55e" />
+                    <path d="M 0 1.5 L 8 5 L 0 8.5" fill="none" stroke="#14b8a6" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
                   </marker>
                 </defs>
-                {routeConnections.map((connection, index) => (
-                  <g key={connection.key} className="tour-route-leg" style={{ '--leg-order': index } as CSSProperties}>
-                    <path className="tour-route-underlay" d={connection.path} />
-                    <path className={`tour-route-leg-path ${connection.accent === 'green' ? 'green' : 'red'}`} d={connection.path} markerEnd={`url(#tourRouteArrow${connection.accent === 'green' ? 'Green' : 'Red'})`} />
-                    <circle className="tour-route-spark" r="1.2">
-                      <animateMotion dur="2.15s" begin={`${5 + index * 0.22}s`} fill="freeze" path={connection.path} />
-                    </circle>
-                  </g>
-                ))}
-                {longRoutePath && (
-                  <g className="tour-route-leg tour-route-long" style={{ '--leg-order': 10 } as CSSProperties}>
-                    <path className="tour-route-underlay" d={longRoutePath} />
-                    <path className="tour-route-leg-path green" d={longRoutePath} markerEnd="url(#tourRouteArrowGreen)" />
-                  </g>
-                )}
                 {travelCue && travelCue.fromDest && travelCue.toDest && (
                   <g key={travelCue.key} className="tour-travel-route">
+                    <path
+                      className="tour-travel-route-underlay"
+                      d={routeCurvePath(travelCue.fromDest, travelCue.toDest, 0)}
+                    />
                     <path
                       className="tour-travel-route-path"
                       d={routeCurvePath(travelCue.fromDest, travelCue.toDest, 0)}
                       markerEnd="url(#tourRouteArrowGreen)"
                     />
-                    <circle className="tour-travel-plane-marker" r="2.4" fill="#e53935">
-                      <animateMotion dur="3.8s" fill="freeze" calcMode="spline" keySplines="0.34 0.46 0.64 0.94" path={routeCurvePath(travelCue.fromDest, travelCue.toDest, 0)} />
+                    <circle className="tour-travel-plane-marker" r="1.6" fill="#e53935">
+                      <animateMotion dur={`${Math.max(1.2, TOUR_ME_TRAVEL_DURATION_SECONDS - 0.5)}s`} fill="freeze" calcMode="spline" keySplines="0.34 0.46 0.64 0.94" path={routeCurvePath(travelCue.fromDest, travelCue.toDest, 0)} />
                     </circle>
                   </g>
                 )}
@@ -854,7 +890,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
                       title={`${destination.name}, ${destination.country}`}
                     >
                       <span>{destination.rank}</span>
-                      <small>{destination.country}</small>
+                      <small>{destination.name}</small>
                     </button>
                   )
                 })}
@@ -929,19 +965,24 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
           )}
         </div>
         <aside className="tour-panel">
-          <div className="tour-panel-head">
-            <div><div className="tour-kicker">{stage === 'world' ? 'Clip route finder' : 'Clips in this spot'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
-            <button className="tour-close" onClick={onClose} aria-label="Close tour me">×</button>
+          <div className="tour-panel-sticky">
+              <div className="tour-panel-head">
+                <div><div className="tour-kicker">{stage === 'world' ? 'Clip route finder' : 'Clips in this spot'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
+            {stage !== 'world' && <button className="tour-close" onClick={onClose} aria-label="Close tour me">×</button>}
           </div>
-          <div className="tour-next-controls">
-            <button type="button" onClick={() => moveDestination(-1)} aria-label="Previous destination">
-              <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-              Prev
-            </button>
-            <button type="button" onClick={() => moveDestination(1)} aria-label="Next destination">
-              Next
-              <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
+          <p className="tour-destination-summary">{displayedDescription}</p>
+          {stage !== 'world' && (
+            <div className="tour-next-controls">
+              <button type="button" onClick={() => moveDestination(-1)} aria-label="Previous destination">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                Prev
+              </button>
+              <button type="button" onClick={() => moveDestination(1)} aria-label="Next destination">
+                Next
+                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          )}
           </div>
           {/* TikTok-style vertical scrolling clips */}
           {stage === 'place' && displayedAreaClips.length > 0 ? (
@@ -966,14 +1007,14 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
                             if (el) videoRefs.current.set(clip.id, el)
                           }}
                           src={clip.url}
-                          loop
                           playsInline
                           muted={false}
+                          autoPlay={index === currentClipIndex}
                           className="tour-tiktok-video-element"
                         />
                       ) : embedUrl ? (
                         <iframe
-                          src={`${embedUrl}&autoplay=0&mute=0&loop=1&controls=1`}
+                          src={`${embedUrl}&autoplay=${index === currentClipIndex ? '1' : '0'}&mute=0&loop=0&controls=1&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}`}
                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                           allowFullScreen
                           title={clip.title}
@@ -1028,7 +1069,23 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
               })}
             </div>
           ) : stage === 'world' ? (
-            <p className="tour-why">Pick a pin to see short clips and map context from Tourista vloggers.</p>
+            <div className="tour-destination-list" aria-label="Tour route destinations">
+              {destinations.map(destination => (
+                <button
+                  key={destination.id}
+                  type="button"
+                  className={`tour-destination-row${destination.id === selectedDestination?.id ? ' active' : ''}`}
+                  onClick={() => selectDestination(destination)}
+                >
+                  <span className="tour-destination-rank">{destination.rank}</span>
+                  <span className="tour-destination-copy">
+                    <strong>{destination.name}</strong>
+                    <small>{destination.country}</small>
+                    <em>{conciseDestinationCopy(destination)}</em>
+                  </span>
+                </button>
+              ))}
+            </div>
           ) : (
             <div className="tour-empty-clips">No short clips available for this destination yet.</div>
           )}

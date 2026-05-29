@@ -209,6 +209,7 @@ export default function Home() {
   const [cityFocused, setCityFocused] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState<Record<string, boolean>>({})
   const [emojiPickerField, setEmojiPickerField] = useState<string | null>(null)
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState<{ left: number; top: number } | null>(null)
   const [mediaModal, setMediaModal] = useState<{ title: string; items: MediaItem[]; index: number } | null>(null)
   const [creditsReviewed, setCreditsReviewed] = useState(false)
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
@@ -386,15 +387,16 @@ export default function Home() {
     if (ytSearch) return `https://www.youtube.com/embed?listType=search&list=${ytSearch[1]}&controls=1&rel=0`
     return null
   }
-  const withAutoplay = (url: string) => `${url}${url.includes('?') ? '&' : '?'}autoplay=1&mute=1&playsinline=1`
+  const withAutoplay = (url: string, muted = true) =>
+    `${url}${url.includes('?') ? '&' : '?'}autoplay=1&mute=${muted ? '1' : '0'}&playsinline=1`
   const getFeedEmbedUrl = (v: VlogCard) => {
     const base = v.youtubeUrl ? getEmbedUrl(v.youtubeUrl) : null
-    return base ? withAutoplay(base) : null
+    return base ? withAutoplay(base, true) : null
   }
   const getVlogEmbedUrl = (url?: string | null) => {
     if (!url) return null
     const base = getEmbedUrl(url)
-    return base ? withAutoplay(base) : null
+    return base ? withAutoplay(base, false) : null
   }
   const directVideoUrl = (url: string) =>
     url.startsWith('blob:') ||
@@ -469,6 +471,8 @@ export default function Home() {
           activity: day.activity || '',
           cost: day.cost || '',
           locked: idx >= 2, // Keep the first two AI-generated days open as the free preview.
+          media: Array.isArray(day.media) ? day.media : [],
+          mediaCarouselIndex: 0,
           highlights: day.highlights || '',
           foodTips: day.foodTips || '',
           gettingThere: day.gettingThere || '',
@@ -532,6 +536,10 @@ export default function Home() {
   ══════════════════════════════════════════ */
   const nextStep = () => {
     setPublishError('')
+    if (aiAutoFilling) {
+      setPublishError('Please wait for AI to finish generating the vlog fields.')
+      return
+    }
     if (postStep === 1) {
       if (!videoUrl.trim()) { setPublishError('Please add a video link (YouTube, Facebook, TikTok, or Instagram).'); return }
       if (!postForm.title.trim()) { setPublishError('Please add a vlog title.'); return }
@@ -645,6 +653,64 @@ export default function Home() {
       video.src = url
     })
 
+  const positionEmojiPicker = useCallback((fieldId: string) => {
+    const button = document.querySelector(`[data-emoji-field="${fieldId}"]`)
+    if (!(button instanceof HTMLElement)) return
+
+    const rect = button.getBoundingClientRect()
+    setEmojiPickerPosition({
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 244)),
+      top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 250)),
+    })
+  }, [])
+
+  const toggleEmojiPicker = (fieldId: string, event: any) => {
+    const isOpen = emojiPickerField === fieldId
+    setEmojiPickerField(isOpen ? null : fieldId)
+    setShowEmojiPicker(p => ({ ...p, [fieldId]: !isOpen }))
+
+    if (isOpen) {
+      setEmojiPickerPosition(null)
+      return
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    setEmojiPickerPosition({
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 244)),
+      top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 250)),
+    })
+  }
+
+  useEffect(() => {
+    if (!emojiPickerField) return
+
+    const closeOrReposition = (event: Event) => {
+      const target = event.target as Node | null
+      if (target && (target as Element).closest?.('.emoji-popover, [data-emoji-field]')) return
+      setEmojiPickerField(null)
+      setEmojiPickerPosition(null)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setEmojiPickerField(null)
+        setEmojiPickerPosition(null)
+      }
+    }
+    const onMove = () => positionEmojiPicker(emojiPickerField)
+
+    document.addEventListener('mousedown', closeOrReposition)
+    document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+
+    return () => {
+      document.removeEventListener('mousedown', closeOrReposition)
+      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
+  }, [emojiPickerField, positionEmojiPicker])
+
   const handleEmojiSelect = (fieldId: string, emoji: string) => {
     const textarea = textareaRefs.current[fieldId]
     if (!textarea) return
@@ -665,6 +731,7 @@ export default function Home() {
     // Close emoji picker
     setShowEmojiPicker(p => ({ ...p, [fieldId]: false }))
     setEmojiPickerField(null)
+    setEmojiPickerPosition(null)
 
     // Restore cursor position
     setTimeout(() => {
@@ -1431,64 +1498,95 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Itinerary */}
-                  {vlog.itinerary.length > 0 && (
-                    <>
-                      <div className="gi-panel-section-title">Day-by-day itinerary</div>
-                      {vlog.itinerary.map(day => (
-                        <div key={day.id} className="gi-itinerary-card" style={{ opacity: day.locked && !unlocked ? 0.55 : 1 }}>
-                          <div className="gi-itinerary-head">
-                            <div className="gi-itinerary-day" style={{ color: day.locked && !unlocked ? 'var(--color-text-secondary)' : 'var(--g)' }}>
-                              Day {day.day}
-                            </div>
-                            <div className="gi-itinerary-activity">{day.activity}</div>
-                          </div>
-                          {(day.cost && (!day.locked || unlocked)) && (
-                            <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'6px' }}>💰 ₱{day.cost.toLocaleString()}</div>
-                          )}
-                          {(!day.locked || unlocked) && (() => {
-                            const dayMedia = mediaForDay(day)
-                            if (!dayMedia.length) return null
-                            return (
-                              <>
-                                <div className="detail-media-grid">
-                                  {dayMedia.map((item, mediaIndex) => (
-                                    <div
-                                      key={`${item.url}-${mediaIndex}`}
-                                      className="day-media-card"
-                                      role="button"
-                                      tabIndex={0}
-                                      onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)}
-                                      onKeyDown={event => {
-                                        if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${day.day} photos & videos`, dayMedia, mediaIndex)
-                                      }}
-                                    >
-                                      {renderMediaPreview(item, `Day ${day.day} media ${mediaIndex + 1}`)}
-                                      <span className="day-media-card-overlay">View</span>
-                                    </div>
-                                  ))}
+                  {/* Itinerary with Short Clips */}
+                  {vlog.itinerary.length > 0 && (() => {
+                    // Collect all video clips from unlocked days
+                    const allClips = vlog.itinerary
+                      .filter(day => !day.locked || unlocked)
+                      .flatMap(day => {
+                        const dayMedia = mediaForDay(day)
+                        return dayMedia
+                          .filter(item => item.type === 'video')
+                          .map(item => ({ ...item, dayNumber: day.day, activity: day.activity }))
+                      })
+
+                    return (
+                      <>
+                        <div className="gi-panel-section-title">Day-by-day itinerary</div>
+                        <div className="itinerary-with-clips">
+                          {/* Left side: Itinerary */}
+                          <div className="itinerary-list">
+                            {vlog.itinerary.map(day => (
+                              <div key={day.id} className="gi-itinerary-card" style={{ opacity: day.locked && !unlocked ? 0.55 : 1 }}>
+                                <div className="gi-itinerary-head">
+                                  <div className="gi-itinerary-day" style={{ color: day.locked && !unlocked ? 'var(--color-text-secondary)' : 'var(--g)' }}>
+                                    Day {day.day}
+                                  </div>
+                                  <div className="gi-itinerary-activity">{day.activity}</div>
                                 </div>
-                                <button type="button" className="day-media-open compact" onClick={() => openMediaModal(`Day ${day.day} photos & videos`, dayMedia, 0)}>
-                                  View media ({dayMedia.length})
-                                </button>
-                              </>
-                            )
-                          })()}
-                          {day.locked && !unlocked ? (
-                            <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', display:'flex', alignItems:'center', gap:'4px' }}>
-                              <svg viewBox="0 0 24 24" width="12" height="12" style={{ stroke:'currentColor', fill:'none', strokeWidth:2 }}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                              Unlock to see the full day plan
+                                {(day.cost && (!day.locked || unlocked)) && (
+                                  <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'6px' }}>💰 ₱{day.cost.toLocaleString()}</div>
+                                )}
+                                {day.locked && !unlocked ? (
+                                  <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', display:'flex', alignItems:'center', gap:'4px' }}>
+                                    <svg viewBox="0 0 24 24" width="12" height="12" style={{ stroke:'currentColor', fill:'none', strokeWidth:2 }}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                    Unlock to see the full day plan
+                                  </div>
+                                ) : (
+                                  <>
+                                    {day.highlights && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>✨ {day.highlights}</div>}
+                                    {day.foodTips && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>🍜 {day.foodTips}</div>}
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Right side: Autoplaying Short Clips */}
+                          {allClips.length > 0 && (
+                            <div className="clips-sidebar">
+                              <div className="clips-sidebar-header">
+                                <svg viewBox="0 0 24 24" width="16" height="16" style={{ stroke:'currentColor', fill:'none', strokeWidth:2 }}>
+                                  <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                                <span>Short clips ({allClips.length})</span>
+                              </div>
+                              <div className="clips-feed">
+                                {allClips.map((clip, index) => {
+                                  const previewUrl = clipPreviewUrl(clip.url)
+                                  return (
+                                    <div key={`${clip.url}-${index}`} className="clip-item">
+                                      <div className="clip-video">
+                                        {previewUrl ? (
+                                          <iframe
+                                            src={previewUrl}
+                                            title={`Day ${clip.dayNumber} clip`}
+                                            allow="autoplay; encrypted-media; picture-in-picture"
+                                            allowFullScreen
+                                          />
+                                        ) : directVideoUrl(clip.url) ? (
+                                          <video src={clip.url} muted autoPlay loop playsInline />
+                                        ) : (
+                                          <div className="clip-link-preview">
+                                            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                            <span>View clip</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="clip-info">
+                                        <div className="clip-day">Day {clip.dayNumber}</div>
+                                        <div className="clip-activity">{clip.activity}</div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
                             </div>
-                          ) : (
-                            <>
-                                                            {day.highlights && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>✨ {day.highlights}</div>}
-                              {day.foodTips && <div style={{ fontSize:'11px', color:'var(--color-text-secondary)', marginBottom:'4px' }}>🍜 {day.foodTips}</div>}
-                            </>
                           )}
                         </div>
-                      ))}
-                    </>
-                  )}
+                      </>
+                    )
+                  })()}
 
                   {/* More from creator */}
                   {relatedCreatorVlogs.length > 0 && (
@@ -1975,7 +2073,6 @@ export default function Home() {
                   <div className="vlbr">
                     <input className="vli" type="text" placeholder="e.g. https://youtube.com/watch?v=..."
                       value={videoUrl} onChange={e => detectVideo(e.target.value)}/>
-                    <button className="vlbb">Add</button>
                     <button
                       className="vlbb"
                       style={{
@@ -2320,15 +2417,13 @@ export default function Home() {
                         </div>
 
                         {/* Highlights */}
-                        <div>
+                        <div className="emoji-field">
                           <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
                             <span className="day-sub-lbl">✨ Highlights</span>
                             <button
                               type="button"
-                              onClick={() => {
-                                setEmojiPickerField(emojiPickerField === `day-${i}-highlights` ? null : `day-${i}-highlights`)
-                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-highlights`]: !p[`day-${i}-highlights`] }))
-                              }}
+                              data-emoji-field={`day-${i}-highlights`}
+                              onClick={(event) => toggleEmojiPicker(`day-${i}-highlights`, event)}
                               style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
                               title="Add emoji"
                             >
@@ -2341,11 +2436,11 @@ export default function Home() {
                             value={d.highlights || ''}
                             onChange={e => updDay(i, 'highlights', e.target.value)}/>
                           {emojiPickerField === `day-${i}-highlights` && (
-                            <div className="emoji-popover">
+                            <div className="emoji-popover" style={emojiPickerPosition || undefined}>
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-highlights`, e.emoji)}
-                                width={320}
-                                height={330}
+                                width={224}
+                                height={231}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -2358,10 +2453,8 @@ export default function Home() {
                             <span className="day-sub-lbl">🍜 Food tips</span>
                             <button
                               type="button"
-                              onClick={() => {
-                                setEmojiPickerField(emojiPickerField === `day-${i}-foodTips` ? null : `day-${i}-foodTips`)
-                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-foodTips`]: !p[`day-${i}-foodTips`] }))
-                              }}
+                              data-emoji-field={`day-${i}-foodTips`}
+                              onClick={(event) => toggleEmojiPicker(`day-${i}-foodTips`, event)}
                               style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
                               title="Add emoji"
                             >
@@ -2374,11 +2467,11 @@ export default function Home() {
                             value={d.foodTips || ''}
                             onChange={e => updDay(i, 'foodTips', e.target.value)}/>
                           {emojiPickerField === `day-${i}-foodTips` && (
-                            <div className="emoji-popover">
+                            <div className="emoji-popover" style={emojiPickerPosition || undefined}>
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-foodTips`, e.emoji)}
-                                width={320}
-                                height={330}
+                                width={224}
+                                height={231}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -2391,10 +2484,8 @@ export default function Home() {
                             <span className="day-sub-lbl">🚌 Getting around</span>
                             <button
                               type="button"
-                              onClick={() => {
-                                setEmojiPickerField(emojiPickerField === `day-${i}-gettingThere` ? null : `day-${i}-gettingThere`)
-                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-gettingThere`]: !p[`day-${i}-gettingThere`] }))
-                              }}
+                              data-emoji-field={`day-${i}-gettingThere`}
+                              onClick={(event) => toggleEmojiPicker(`day-${i}-gettingThere`, event)}
                               style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
                               title="Add emoji"
                             >
@@ -2407,11 +2498,11 @@ export default function Home() {
                             value={d.gettingThere || ''}
                             onChange={e => updDay(i, 'gettingThere', e.target.value)}/>
                           {emojiPickerField === `day-${i}-gettingThere` && (
-                            <div className="emoji-popover">
+                            <div className="emoji-popover" style={emojiPickerPosition || undefined}>
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-gettingThere`, e.emoji)}
-                                width={320}
-                                height={330}
+                                width={224}
+                                height={231}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -2424,10 +2515,8 @@ export default function Home() {
                             <span className="day-sub-lbl">💡 Tips & budget breakdown</span>
                             <button
                               type="button"
-                              onClick={() => {
-                                setEmojiPickerField(emojiPickerField === `day-${i}-tips` ? null : `day-${i}-tips`)
-                                setShowEmojiPicker(p => ({ ...p, [`day-${i}-tips`]: !p[`day-${i}-tips`] }))
-                              }}
+                              data-emoji-field={`day-${i}-tips`}
+                              onClick={(event) => toggleEmojiPicker(`day-${i}-tips`, event)}
                               style={{ background:'none', border:'none', cursor:'pointer', fontSize:'16px', padding:'0 2px' }}
                               title="Add emoji"
                             >
@@ -2440,11 +2529,11 @@ export default function Home() {
                             value={d.tips || ''}
                             onChange={e => updDay(i, 'tips', e.target.value)}/>
                           {emojiPickerField === `day-${i}-tips` && (
-                            <div className="emoji-popover">
+                            <div className="emoji-popover" style={emojiPickerPosition || undefined}>
                               <EmojiPicker
                                 onEmojiClick={(e) => handleEmojiSelect(`day-${i}-tips`, e.emoji)}
-                                width={320}
-                                height={330}
+                                width={224}
+                                height={231}
                                 previewConfig={{ showPreview: false }}
                               />
                             </div>
@@ -2557,7 +2646,7 @@ export default function Home() {
                 {postStep < 3 && (
                   <button className="bb" onClick={saveDraft}>Save draft</button>
                 )}
-                <button className="nb" onClick={nextStep} disabled={publishing || (postStep === 3 && !creditsReviewed)}>
+                <button className="nb" onClick={nextStep} disabled={publishing || aiAutoFilling || (postStep === 3 && !creditsReviewed)}>
                   {postStep === 3 ? (publishing ? (editingVlogId ? 'Saving…' : 'Publishing…') : (editingVlogId ? 'Save changes →' : 'Publish →')) : 'Continue →'}
                 </button>
               </div>
