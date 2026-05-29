@@ -20,6 +20,7 @@ model User {
   country      String?
   travelStyle  String?
   verified     Boolean  @default(false)
+  isAdmin      Boolean  @default(false)
   followers    Int      @default(0)
   vlogCount    Int      @default(0)
   avgRating    Float    @default(0)

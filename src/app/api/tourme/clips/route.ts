@@ -4,9 +4,21 @@ import prisma from '@/lib/prisma'
 const stableImageLock = (value: string) =>
   value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
 
+const generatedCoverImage = (title: string, location: string, country: string) => {
+  const params = new URLSearchParams({
+    title,
+    place: location,
+    country,
+    theme: 'travel cover',
+    day: '1',
+    seed: String(stableImageLock(`${title}-${location}-${country}`)),
+  })
+  return `/api/generated-travel-image?${params.toString()}`
+}
+
 const coverPhotoFor = (vlog: { coverImage?: string | null; title: string; location: string; country: string }) =>
   vlog.coverImage ||
-  `https://loremflickr.com/1200/800/${encodeURIComponent(vlog.location)},${encodeURIComponent(vlog.country)},travel/all?lock=${stableImageLock(vlog.title)}`
+  generatedCoverImage(vlog.title, vlog.location, vlog.country)
 
 const parseMedia = (day: { clipDescription?: string | null; mediaUrl?: string | null; mediaType?: string | null }) => {
   try {

@@ -2,6 +2,12 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+const youtubeIdFromUrl = (url: string) =>
+  url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([^&\s?]+)/)?.[1] || url.split('/').pop() || ''
+
+const highResYoutubeThumb = (url: string) =>
+  `https://img.youtube.com/vi/${youtubeIdFromUrl(url)}/maxresdefault.jpg`
+
 const clipVloggers = [
   {
     handle: 'MarisolRoams',
@@ -279,7 +285,7 @@ async function main() {
         trending: index < 2,
         description: clip.description,
         youtubeUrl: clip.url,
-        coverImage: `https://img.youtube.com/vi/${clip.url.split('/').pop()}/hqdefault.jpg`,
+        coverImage: highResYoutubeThumb(clip.url),
         thumbnailColor: `t${(index % 5) + 1}`,
         status: 'live',
         authorId: author.id,

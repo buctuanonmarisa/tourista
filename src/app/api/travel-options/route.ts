@@ -22,9 +22,9 @@ export async function GET() {
     const budgets = options.filter(option => option.category === 'budget').map(option => option.label)
 
     return NextResponse.json({
-      countries: countries.length ? countries : FALLBACK_COUNTRIES,
-      vibes: vibes.length ? vibes : FALLBACK_VIBES,
-      budgets: budgets.length ? budgets : FALLBACK_BUDGETS,
+      countries: Array.from(new Set([...countries, ...FALLBACK_COUNTRIES])),
+      vibes: Array.from(new Set([...vibes, ...FALLBACK_VIBES])),
+      budgets: Array.from(new Set([...budgets, ...FALLBACK_BUDGETS])),
     })
   } catch {
     return NextResponse.json(groupedFallback)

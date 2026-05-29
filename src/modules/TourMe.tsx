@@ -968,7 +968,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
           <div className="tour-panel-sticky">
               <div className="tour-panel-head">
                 <div><div className="tour-kicker">{stage === 'world' ? 'Clip route finder' : 'Clips in this spot'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
-            {stage !== 'world' && <button className="tour-close" onClick={onClose} aria-label="Close tour me">×</button>}
+            <button className="tour-close" onClick={onClose} aria-label="Close tour me">×</button>
           </div>
           <p className="tour-destination-summary">{displayedDescription}</p>
           {stage !== 'world' && (

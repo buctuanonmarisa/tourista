@@ -4,9 +4,21 @@ import prisma from '@/lib/prisma'
 const stableImageLock = (value: string) =>
   value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
 
+const generatedCoverImage = (title: string, location: string, country: string) => {
+  const params = new URLSearchParams({
+    title,
+    place: location,
+    country,
+    theme: 'travel cover',
+    day: '1',
+    seed: String(stableImageLock(`${title}-${location}-${country}`)),
+  })
+  return `/api/generated-travel-image?${params.toString()}`
+}
+
 const coverPhotoFor = (vlog: { coverImage?: string | null; title: string; location: string; country: string }) =>
   vlog.coverImage ||
-  `https://loremflickr.com/1200/800/${encodeURIComponent(vlog.location)},${encodeURIComponent(vlog.country)},travel/all?lock=${stableImageLock(vlog.title)}`
+  generatedCoverImage(vlog.title, vlog.location, vlog.country)
 
 const stripNonDigit = (value: unknown) => parseInt(String(value || '').replace(/[^\d]/g, '') || '0')
 
@@ -78,8 +90,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const country = body.country || 'Philippines'
     const locationBase = body.city || body.cities || body.location || 'Unknown'
     const title = body.title || 'Untitled Vlog'
-    const fallbackCoverImage =
-      `https://loremflickr.com/1200/800/${encodeURIComponent(locationBase)},${encodeURIComponent(country)},travel/all?lock=${stableImageLock(title)}`
+    const fallbackCoverImage = generatedCoverImage(title, locationBase, country)
 
     const vlog = await prisma.vlog.update({
       where: { id: params.id },

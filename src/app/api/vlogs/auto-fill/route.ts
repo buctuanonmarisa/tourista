@@ -72,7 +72,7 @@ const stripToJson = (value: string) => {
 const toDigits = (value: unknown) => String(value || '0').replace(/[^\d]/g, '')
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const TRANSCRIPT_PROMPT_LIMIT = 12000
-const PHOTOS_PER_ITINERARY_DAY = 6
+const PHOTOS_PER_ITINERARY_DAY = 5
 
 const htmlDecode = (value: string) =>
   value
@@ -209,7 +209,7 @@ const mediaKeywords = (value: string) =>
   compactWhitespace(value.replace(/[^\w\s,-]/g, ' '))
     .split(/[\s,]+/)
     .filter(word => word.length > 2)
-    .slice(0, 8)
+    .slice(0, 14)
     .join(',')
 
 const mediaSearchTerm = (day: GeneratedItineraryDay, fallbackPlace: string, country: string) =>
@@ -222,15 +222,21 @@ const mediaSearchTerm = (day: GeneratedItineraryDay, fallbackPlace: string, coun
   ].filter(Boolean).join(' '))
 
 const destinationPhotoUrl = (term: string, place: string, country: string, dayIndex: number, photoIndex: number) => {
-  const photoThemes = ['landmark', 'street', 'food', 'view', 'market', 'nature']
-  const query = mediaKeywords(`${place},${country},${photoThemes[photoIndex % photoThemes.length]},${term},travel`)
-  return `https://loremflickr.com/1200/800/${encodeURIComponent(query)}/all?lock=${stableMediaLock(`${query}-${dayIndex}-${photoIndex}`)}`
+  const photoThemes = ['landmark exterior', 'street scene', 'local food market', 'scenic viewpoint', 'nature landscape']
+  const theme = photoThemes[photoIndex % photoThemes.length]
+  const params = new URLSearchParams({
+    title: mediaKeywords(`${term}, travel photography`) || `${place} travel`,
+    place,
+    country,
+    theme,
+    day: String(dayIndex + 1),
+    seed: String(stableMediaLock(`${country}-${place}-${theme}-${term}-${dayIndex}-${photoIndex}`)),
+  })
+  return `/api/generated-travel-image?${params.toString()}`
 }
 
 const videoFrameStillUrls = (videoId: string, dayIndex: number) => {
-  const stills = ['hqdefault', '1', '2', '3']
-  const still = stills[dayIndex % stills.length]
-  return [`https://img.youtube.com/vi/${videoId}/${still}.jpg`]
+  return []
 }
 
 // Build a richer media set for each generated day without embedding unavailable search/video results.
@@ -454,8 +460,86 @@ const conciseDetail = (value: unknown, fallbackEmoji: string) => {
   return `${words.slice(0, 28).join(' ').replace(/[,.!?;:]*$/, '')}.`
 }
 
+const countryFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) => {
+  const metadataText = [
+    metadata.title,
+    metadata.keywords?.join(' '),
+    metadata.description,
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  if (metadataText.includes('galapagos') || metadataText.includes('galápagos')) {
+    return 'Ecuador'
+  }
+
+  const findCountry = (source: string) =>
+    FALLBACK_COUNTRIES.find(country => source.toLowerCase().includes(country.toLowerCase()))
+
+  return (
+    findCountry(metadata.title || '') ||
+    findCountry(metadata.keywords?.join(' ') || '') ||
+    findCountry(metadata.description || '') ||
+    'Philippines'
+  )
+}
+
+const cityOptionsForCountry: Record<string, string[]> = {
+  'South Africa': ['Cape Town', 'Kruger National Park', 'Garden Route'],
+  Philippines: ['Manila', 'Cebu', 'Palawan'],
+  Japan: ['Tokyo', 'Kyoto', 'Osaka'],
+  Thailand: ['Bangkok', 'Chiang Mai', 'Phuket'],
+  Indonesia: ['Bali', 'Ubud', 'Jakarta'],
+  France: ['Paris', 'Nice', 'Lyon'],
+  Italy: ['Rome', 'Florence', 'Venice'],
+  Greece: ['Athens', 'Santorini', 'Crete'],
+  USA: ['New York', 'Los Angeles', 'San Francisco'],
+  Canada: ['Banff', 'Vancouver', 'Toronto'],
+  Ecuador: ['Galapagos Islands', 'Santa Cruz Island', 'Isabela Island', 'San Cristobal Island', 'Quito'],
+}
+
+function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
+  const country = countryFromMetadata(metadata)
+  const cities = cityOptionsForCountry[country] || [country]
+  const duration = 3
+  const itinerary = Array.from({ length: duration }, (_, index) => {
+    const place = cities[index % cities.length]
+    const day: GeneratedItineraryDay = {
+      day: index + 1,
+      activity: `${place} travel highlights`,
+      highlights: `✨ Use this day for the strongest ${place} sights and scenic stops mentioned in the vlog.`,
+      food_tips: `🍜 Try local food near the route and verify specific restaurants from the creator's video notes.`,
+      getting_there: `🚕 Cluster nearby stops, use rideshare or local transport, and check drive times before booking.`,
+      tips: `💡 Start early, save offline maps, and confirm fees or opening hours before locking the plan.`,
+      estimated_cost_php: '0',
+    }
+
+    return {
+      day: index + 1,
+      activity: day.activity || `Day ${index + 1}`,
+      highlights: conciseDetail(day.highlights, '✨'),
+      foodTips: conciseDetail(day.food_tips, '🍜'),
+      gettingThere: conciseDetail(day.getting_there, '🚕'),
+      tips: conciseDetail(day.tips, '💡'),
+      cost: '0',
+      media: generateItineraryMedia(day, index, videoId, country, cities.join(',')),
+    }
+  })
+
+  return {
+    title: metadata.title.slice(0, 100),
+    description: metadata.description || `A travel vlog by ${metadata.author}`,
+    country,
+    cities: cities.join(', '),
+    vibe: '',
+    coverImage: metadata.thumbnailUrl,
+    duration,
+    estimatedCost: '0',
+    cost: '0',
+    itinerary,
+  }
+}
+
 // Validate and clean AI response
-function validateAIResponse(aiResponse: any, metadata: { title: string; thumbnailUrl: string }, videoId: string) {
+function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId: string) {
   // Try to extract country from video title if AI response is invalid
   let country = aiResponse.country
 
@@ -466,7 +550,7 @@ function validateAIResponse(aiResponse: any, metadata: { title: string; thumbnai
     const foundCountry = FALLBACK_COUNTRIES.find(c =>
       titleLower.includes(c.toLowerCase())
     )
-    country = foundCountry || 'Philippines'
+    country = foundCountry || countryFromMetadata(metadata)
   }
 
   const vibes = Array.isArray(aiResponse.travel_vibes)
@@ -552,18 +636,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          data: {
-            title: metadata.title,
-            description: `A travel vlog by ${metadata.author}`,
-            country: 'Philippines',
-            cities: '',
-            vibe: '',
-            coverImage: metadata.thumbnailUrl,
-            duration: 3,
-            estimatedCost: '0',
-            cost: '0',
-            itinerary: [],
-          },
+          data: buildFallbackAIResponse(metadata, videoId),
           warning: 'AI enhancement unavailable. Basic metadata provided.',
         },
         { status: 200 },

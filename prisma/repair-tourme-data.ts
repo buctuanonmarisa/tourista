@@ -19,6 +19,21 @@ const highResYoutubeThumb = (url?: string | null) => {
   return id ? `https://img.youtube.com/vi/${id}/maxresdefault.jpg` : ''
 }
 
+const isLowResolutionCover = (url?: string | null) => {
+  if (!url) return true
+  return (
+    /\/(?:default|mqdefault|hqdefault|sddefault)\.jpg(?:\?|$)/i.test(url) ||
+    /loremflickr\.com\/(?:640|800|1024|1200)\//i.test(url) ||
+    /loremflickr\.com\/\d+\/(?:480|600|720|800)\//i.test(url)
+  )
+}
+
+const bestCoverFor = (vlog: { coverImage?: string | null; youtubeUrl?: string | null; location: string; country: string; vibe: string }) => {
+  if (!isLowResolutionCover(vlog.coverImage)) return vlog.coverImage || ''
+  const location = vlog.location.split(',')[0]?.trim() || vlog.location || vlog.country
+  return highResYoutubeThumb(vlog.youtubeUrl) || coverPhotoUrl(location, vlog.country, vlog.vibe)
+}
+
 const clipVloggers = [
   { handle: 'MarisolRoams', name: 'Marisol Santos', initials: 'MS', country: 'Philippines', avatarColor: 'ag', travelStyle: 'Beach & islands' },
   { handle: 'TravelWithKai', name: 'Kai Nakamura', initials: 'KN', country: 'Japan', avatarColor: 'ac', travelStyle: 'Cultural immersion' },
@@ -264,7 +279,7 @@ async function repairAllLiveVlogs() {
   for (const vlog of vlogs) {
     const location = vlog.location.split(',')[0]?.trim() || vlog.location || vlog.country
     const minDuration = Math.max(vlog.duration || 0, vlog.itinerary.length, 3)
-    const coverImage = vlog.coverImage || highResYoutubeThumb(vlog.youtubeUrl) || coverPhotoUrl(location, vlog.country, vlog.vibe)
+    const coverImage = bestCoverFor(vlog)
 
     await prisma.vlog.update({
       where: { id: vlog.id },

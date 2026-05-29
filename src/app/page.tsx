@@ -40,6 +40,7 @@ interface UserProfile {
   verified: boolean; followers: number; vlogCount: number; avgRating: number
   totalViews: number; credits: number; earnings: number
   youtubeUrl?: string | null; instagramUrl?: string | null; tiktokUrl?: string | null
+  isAdmin?: boolean
 }
 interface MediaItem {
   url: string; type: 'image' | 'video'
@@ -77,8 +78,19 @@ const stripTemporaryUploadUrls = <T extends { coverImage?: string }>(form: T) =>
 
 const stableImageLock = (value: string) =>
   value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+const generatedTravelImageUrl = (title: string, location?: string | null, country?: string | null) => {
+  const params = new URLSearchParams({
+    title: title || 'Travel vlog',
+    place: location || country || 'Travel',
+    country: country || DEFAULT_COUNTRY,
+    theme: 'travel cover',
+    day: '1',
+    seed: String(stableImageLock(`${title}-${location || ''}-${country || ''}`)),
+  })
+  return `/api/generated-travel-image?${params.toString()}`
+}
 const fallbackCoverImage = (title: string, location?: string | null, country?: string | null) =>
-  `https://loremflickr.com/1200/800/${encodeURIComponent(location || title)},${encodeURIComponent(country || '')},travel/all?lock=${stableImageLock(title)}`
+  generatedTravelImageUrl(title, location, country)
 const coverForVlog = (v: { title: string; location?: string | null; country?: string | null; coverImage?: string | null }) =>
   v.coverImage || fallbackCoverImage(v.title, v.location, v.country)
 const CITIES_BY_COUNTRY: Record<string, string[]> = {
@@ -106,6 +118,7 @@ const CITIES_BY_COUNTRY: Record<string, string[]> = {
   'Argentina': ['Buenos Aires', 'Córdoba', 'Rosario', 'Mendoza', 'La Plata', 'San Miguel de Tucumán', 'Mar del Plata', 'Salta', 'Bariloche', 'Ushuaia', 'Iguazu Falls', 'Patagonia', 'Tango District', 'La Boca', 'San Telmo'],
   'Peru': ['Lima', 'Cusco', 'Arequipa', 'Trujillo', 'Iquitos', 'Puno', 'Ayacucho', 'Huancayo', 'Tacna', 'Piura', 'Machu Picchu', 'Sacred Valley', 'Lake Titicaca', 'Amazon', 'Nazca Lines'],
   'Colombia': ['Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Cartagena', 'Santa Marta', 'Bogotá', 'Cúcuta', 'Bucaramanga', 'Manizales', 'Coffee Triangle', 'Tayrona', 'San Andrés', 'Providencia', 'Leticia'],
+  'Ecuador': ['Quito', 'Guayaquil', 'Cuenca', 'Galapagos Islands', 'Santa Cruz Island', 'Isabela Island', 'San Cristobal Island', 'Otavalo', 'Banos', 'Mindo'],
   'Chile': ['Santiago', 'Valparaíso', 'Viña del Mar', 'Concepción', 'La Serena', 'Temuco', 'Valdivia', 'Puerto Montt', 'Punta Arenas', 'Atacama', 'Patagonia', 'Easter Island', 'Atacama Desert', 'Lake District', 'Torres del Paine'],
   'Egypt': ['Cairo', 'Alexandria', 'Giza', 'Luxor', 'Aswan', 'Hurghada', 'Sharm El-Sheikh', 'Ismailia', 'Port Said', 'Suez', 'Nile Valley', 'Red Sea', 'Sinai', 'Oasis', 'Nile Delta'],
   'South Africa': ['Johannesburg', 'Cape Town', 'Durban', 'Pretoria', 'Port Elizabeth', 'Bloemfontein', 'Pietermaritzburg', 'East London', 'Polokwane', 'Nelspruit', 'Kruger National Park', 'Garden Route', 'Winelands', 'Drakensberg', 'Kruger'],
@@ -225,11 +238,13 @@ export default function Home() {
     name: '', tagline: '', bio: '', country: DEFAULT_COUNTRY,
     travelStyle: 'Budget', youtubeUrl: '', instagramUrl: '', tiktokUrl: '',
     avatarImage: '', coverImage: '',
+    isAdmin: false,
   })
 
   /* ─── Notifications ─── */
   const [nCnt, setNCnt] = useState(4)
   const [readN, setReadN] = useState<Set<string>>(new Set())
+  const adminMode = Boolean(profile?.isAdmin)
 
   /* ─── Dashboard split-view ─── */
   const [selectedMyVlogId, setSelectedMyVlogId] = useState<string | null>(null)
@@ -279,6 +294,7 @@ export default function Home() {
         country: d.country || DEFAULT_COUNTRY, travelStyle: d.travelStyle || 'Budget',
         youtubeUrl: d.youtubeUrl || '', instagramUrl: d.instagramUrl || '', tiktokUrl: d.tiktokUrl || '',
         avatarImage: d.avatarImage || '', coverImage: d.coverImage || '',
+        isAdmin: Boolean(d.isAdmin),
       })
     } catch { /* ignore */ }
   }, [])
@@ -404,7 +420,7 @@ export default function Home() {
     /\.(mp4|webm|ogg)(\?|#|$)/i.test(url)
   const clipPreviewUrl = (url: string) => {
     const embed = getEmbedUrl(url)
-    return embed ? withAutoplay(embed) : null
+    return embed ? withAutoplay(embed, false) : null
   }
 
   const detectVideo = (url: string) => {
@@ -822,13 +838,26 @@ export default function Home() {
   }
 
   const renderMediaPreview = (item: MediaItem, title: string) => {
-    if (item.type !== 'video') return <img src={item.url} alt={title} />
+    if (item.type !== 'video') {
+      return (
+        <img
+          src={item.url}
+          alt={title}
+          onError={event => {
+            const img = event.currentTarget
+            if (!img.src.includes('/api/generated-travel-image')) {
+              img.src = generatedTravelImageUrl(title, postForm.cities || postForm.title, postForm.country)
+            }
+          }}
+        />
+      )
+    }
     const previewUrl = clipPreviewUrl(item.url)
     if (previewUrl) {
       return <iframe src={previewUrl} title={title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
     }
     if (directVideoUrl(item.url)) {
-      return <video src={item.url} muted autoPlay loop playsInline />
+      return <video src={item.url} autoPlay loop playsInline controls />
     }
     return (
       <div className="clip-link-preview">
@@ -1154,6 +1183,51 @@ export default function Home() {
     if (!cost) return ''
     return cur === 'JPY' ? `¥${cost.toLocaleString()}` : `₱${cost.toLocaleString()}`
   }
+  const currencyForCountry = (country?: string | null) => {
+    const key = String(country || DEFAULT_COUNTRY).toLowerCase()
+    const countryCurrencies: Record<string, string> = {
+      philippines: 'PHP',
+      italy: 'EUR',
+      france: 'EUR',
+      germany: 'EUR',
+      spain: 'EUR',
+      greece: 'EUR',
+      portugal: 'EUR',
+      netherlands: 'EUR',
+      belgium: 'EUR',
+      austria: 'EUR',
+      ireland: 'EUR',
+      japan: 'JPY',
+      usa: 'USD',
+      canada: 'CAD',
+      australia: 'AUD',
+      'united kingdom': 'GBP',
+      thailand: 'THB',
+      indonesia: 'IDR',
+      singapore: 'SGD',
+      malaysia: 'MYR',
+      vietnam: 'VND',
+      'south korea': 'KRW',
+      china: 'CNY',
+      india: 'INR',
+      mexico: 'MXN',
+      brazil: 'BRL',
+      argentina: 'ARS',
+      peru: 'PEN',
+      ecuador: 'USD',
+      chile: 'CLP',
+      colombia: 'COP',
+      'south africa': 'ZAR',
+      egypt: 'EGP',
+    }
+    return countryCurrencies[key] || 'USD'
+  }
+  const fmtProfileMoney = (amount?: number | null) =>
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyForCountry(profile?.country),
+      maximumFractionDigits: 0,
+    }).format(amount || 0)
   const activeFilters = [
     ...selectedVibes,
     ...selectedCountries,
@@ -1485,6 +1559,12 @@ export default function Home() {
                       <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                       {vlog.reviews.length}
                     </button>
+                    {adminMode && (
+                      <button className="gi-panel-btn gi-panel-btn-secondary" onClick={() => beginEditVlog(vlog)}>
+                        <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Edit
+                      </button>
+                    )}
                   </div>
 
                   {/* Unlock Box */}
@@ -1565,7 +1645,7 @@ export default function Home() {
                                             allowFullScreen
                                           />
                                         ) : directVideoUrl(clip.url) ? (
-                                          <video src={clip.url} muted autoPlay loop playsInline />
+                                          <video src={clip.url} autoPlay loop playsInline controls />
                                         ) : (
                                           <div className="clip-link-preview">
                                             <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -1707,6 +1787,12 @@ export default function Home() {
                     <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                     Save
                   </button>
+                  {adminMode && (
+                    <button className="eb" onClick={() => beginEditVlog(vlog)}>
+                      <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Edit
+                    </button>
+                  )}
                 </div>
 
                 {/* Unlock box */}
@@ -1987,6 +2073,20 @@ export default function Home() {
                 </div>
               </div>
             </div>
+            <div className="admin-toggle-card">
+              <div>
+                <strong>Admin editing</strong>
+                <span>Turn on to edit any vlog from the main browse page. Turn off to edit only your dashboard vlogs.</span>
+              </div>
+              <label className="switch" aria-label="Toggle admin editing">
+                <input
+                  type="checkbox"
+                  checked={pForm.isAdmin}
+                  onChange={e => setPForm(f => ({ ...f, isAdmin: e.target.checked }))}
+                />
+                <span />
+              </label>
+            </div>
             <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end', paddingTop:'16px', borderTop:'1px solid var(--color-border-tertiary)' }}>
               <button className="bb" onClick={() => go('dashboard')}>Cancel</button>
               <button className="nb" onClick={saveProfile}>Save changes</button>
@@ -2004,7 +2104,7 @@ export default function Home() {
 
             {/* ── Drafts-only view ── */}
             {postView === 'drafts' && (
-              <div>
+              <div className="publish-step">
                 <div style={{ marginBottom:'20px' }}>
                   <div>
                     <div style={{ fontSize:'22px', fontWeight:800, color:'var(--color-text-primary)' }}>Saved drafts</div>
@@ -2562,15 +2662,22 @@ export default function Home() {
               const selectedCredits = Math.max(0, Number(postForm.credits) || 0)
               const maxCredits = Math.max(20, calculatedCredits * 2, selectedCredits)
               return (
-              <div>
-                <div className="fg">
-                  <label>Credits to unlock your full itinerary</label>
-                  <div className="crc">
-                    <div className="crt">
-                      <span className="crl">Credits per tourist</span>
-                      <span className="crv">{selectedCredits === 0 ? 'Free' : `${selectedCredits} credit${selectedCredits > 1 ? 's' : ''}`}</span>
-                    </div>
-                    <div style={{ padding: '12px 14px', background: 'var(--color-bg-secondary)', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
+              <div className="publish-step">
+                <div className="publish-hero">
+                  <div>
+                    <span className="publish-kicker">Pricing checkpoint</span>
+                    <h3>Choose the unlock price</h3>
+                    <p>Keep one or two days free as a preview, then price the full itinerary based on the trip value and detail you added.</p>
+                  </div>
+                  <div className="publish-price">
+                    <strong>{selectedCredits === 0 ? 'Free' : selectedCredits}</strong>
+                    <span>{selectedCredits === 0 ? 'public itinerary' : `credit${selectedCredits > 1 ? 's' : ''}`}</span>
+                  </div>
+                </div>
+                <div className="publish-grid">
+                  <div className="publish-card">
+                    <div className="publish-card-head"><span>Recommended</span></div>
+                    <div className="publish-math">
                       <strong style={{ color: 'var(--color-text-primary)' }}>Recommended value:</strong>
                       <div style={{ marginTop: '8px', fontSize: '12px', lineHeight: '1.6' }}>
                         Total itinerary cost: <strong>₱{totalDayCost.toLocaleString()}</strong><br/>
@@ -2596,15 +2703,6 @@ export default function Home() {
                       />
                       <div className="credit-ruler-bottom">
                         <button type="button" className="credit-mini" onClick={() => updCr(calculatedCredits)}>Use recommended</button>
-                        <input
-                          type="number"
-                          min={0}
-                          max={maxCredits}
-                          value={selectedCredits}
-                          onChange={e => updCr(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                          className="credit-number"
-                          aria-label="Custom credits"
-                        />
                       </div>
                     </div>
                     <div className="cri">
@@ -2704,7 +2802,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="dash-compact-kpis">
-                <div className="dash-mini-kpi"><span>Earnings</span><strong>â‚±{(profile?.earnings || 4320).toLocaleString()}</strong></div>
+                <div className="dash-mini-kpi"><span>Earnings</span><strong>{fmtProfileMoney(profile?.earnings ?? 4320)}</strong></div>
                 <div className="dash-mini-kpi"><span>Views</span><strong>{((profile?.totalViews || 38400)/1000).toFixed(1)}k</strong></div>
                 <div className="dash-mini-kpi"><span>Vlogs</span><strong>{myVlogs.length || profile?.vlogCount || 48}</strong></div>
                 <div className="dash-mini-kpi"><span>Avg rating</span><strong>{(profile?.avgRating || 4.8).toFixed(1)}</strong></div>
@@ -2757,7 +2855,7 @@ export default function Home() {
                     </button>
                   </div>
                   <div className="dash-compact-kpis">
-                    <div className="dash-mini-kpi"><span>Earnings</span><strong>â‚±{(profile?.earnings || 4320).toLocaleString()}</strong></div>
+                    <div className="dash-mini-kpi"><span>Earnings</span><strong>{fmtProfileMoney(profile?.earnings ?? 4320)}</strong></div>
                     <div className="dash-mini-kpi"><span>Views</span><strong>{((profile?.totalViews || 38400)/1000).toFixed(1)}k</strong></div>
                     <div className="dash-mini-kpi"><span>Vlogs</span><strong>{myVlogs.length || profile?.vlogCount || 48}</strong></div>
                     <div className="dash-mini-kpi"><span>Avg rating</span><strong>{(profile?.avgRating || 4.8).toFixed(1)}</strong></div>
@@ -2770,7 +2868,7 @@ export default function Home() {
                 <div className="kpig">
                   <div className="kp">
                     <div className="kpl">Earnings</div>
-                    <div className="kpv" style={{ color:'var(--y)' }}>₱{(profile?.earnings || 4320).toLocaleString()}</div>
+                    <div className="kpv" style={{ color:'var(--y)' }}>{fmtProfileMoney(profile?.earnings ?? 4320)}</div>
                     <div className="kpc up">↑ +18%</div>
                   </div>
                   <div className="kp">
@@ -3154,7 +3252,16 @@ export default function Home() {
                   <strong>{activeModalItem.url}</strong>
                 </a>
               ) : (
-                <img src={activeModalItem.url} alt={`${mediaModal.title} ${mediaModal.index + 1}`} />
+                <img
+                  src={activeModalItem.url}
+                  alt={`${mediaModal.title} ${mediaModal.index + 1}`}
+                  onError={event => {
+                    const img = event.currentTarget
+                    if (!img.src.includes('/api/generated-travel-image')) {
+                      img.src = generatedTravelImageUrl(mediaModal.title, postForm.cities || postForm.title, postForm.country)
+                    }
+                  }}
+                />
               )}
               {mediaModal.items.length > 1 && (
                 <button type="button" className="media-modal-nav next" aria-label="Next media" onClick={() => shiftMediaModal(1)}>

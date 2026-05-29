@@ -77,6 +77,7 @@ export const FALLBACK_COUNTRIES = [
   'Brazil',
   'Argentina',
   'Peru',
+  'Ecuador',
   'Chile',
   'Colombia',
   'Australia',
