@@ -27,7 +27,6 @@ jobs:
 
             APP_DIR="$HOME/tourista"
             REPO_URL="https://github.com/${{ github.repository }}.git"
-            GIT_AUTH_HEADER="AUTHORIZATION: bearer ${GH_PAT:-}"
 
             echo "Preparing EC2 deployment..."
 
@@ -40,16 +39,17 @@ jobs:
               echo "GH_PAT GitHub secret is missing. Add a token with read access to this private repository."
               exit 1
             fi
+            GIT_AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 | tr -d '\n')"
 
             if [ -d "$APP_DIR/.git" ]; then
               echo "Updating existing repository..."
               cd "$APP_DIR"
-              git -c http.extraheader="$GIT_AUTH_HEADER" fetch --depth 1 origin main
+              git -c http.https://github.com/.extraheader="$GIT_AUTH_HEADER" fetch --depth 1 origin main
               git reset --hard origin/main
             else
               echo "Cloning repository..."
               sudo rm -rf "$APP_DIR"
-              git -c http.extraheader="$GIT_AUTH_HEADER" clone --depth 1 --branch main "$REPO_URL" "$APP_DIR"
+              git -c http.https://github.com/.extraheader="$GIT_AUTH_HEADER" clone --depth 1 --branch main "$REPO_URL" "$APP_DIR"
               cd "$APP_DIR"
             fi
             pwd
