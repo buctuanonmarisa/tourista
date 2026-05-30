@@ -23,24 +23,27 @@ jobs:
           script_stop: true
           envs: DATABASE_URL
           script: |
-            set -eu
+            set -eux
 
-            APP_DIR="/home/ec2-user/tourista"
+            APP_DIR="$HOME/tourista"
             REPO_URL="https://github.com/${{ github.repository }}.git"
 
             if ! command -v git >/dev/null 2>&1; then
-              sudo yum install -y git || sudo dnf install -y git
+              sudo dnf install -y git || sudo yum install -y git
             fi
+            git --version
 
             if [ -d "$APP_DIR/.git" ]; then
               cd "$APP_DIR"
               git fetch --depth 1 origin main
               git reset --hard origin/main
             else
-              rm -rf "$APP_DIR"
+              sudo rm -rf "$APP_DIR"
               git clone --depth 1 --branch main "$REPO_URL" "$APP_DIR"
               cd "$APP_DIR"
             fi
+            pwd
+            ls -la
 
             if [ -z "${DATABASE_URL:-}" ]; then
               echo "DATABASE_URL GitHub secret is missing."
