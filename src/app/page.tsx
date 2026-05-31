@@ -1468,11 +1468,11 @@ export default function Home() {
   return (
     <>
       <OnboardingTour />
-      {(processingLabel || aiAutoFilling || publishing) && (
+      {(processingLabel || publishing) && (
         <div className="processing-overlay" role="status" aria-live="polite">
           <div className="processing-card">
             <span className="processing-spinner" />
-            <strong>{processingLabel || (aiAutoFilling ? 'Generating with AI...' : publishing ? 'Publishing vlog...' : 'Processing...')}</strong>
+            <strong>{processingLabel || (publishing ? 'Publishing vlog...' : 'Processing...')}</strong>
           </div>
         </div>
       )}
@@ -2387,9 +2387,12 @@ export default function Home() {
                   <div style={{ fontSize:'13px', color:'var(--g1)', lineHeight:'1.6' }}>
                     Add a link from YouTube, Facebook, TikTok, or Instagram. Tourists watch a preview here on Tourista.
                   </div>
+                  <div className="ai-note">
+                    AI reads public video metadata when available. Some videos block or limit metadata, so generated fields may need a quick review.
+                  </div>
                   <div className="vlbr">
                     <input className="vli" type="text" placeholder="e.g. https://youtube.com/watch?v=..."
-                      value={videoUrl} onChange={e => detectVideo(e.target.value)}/>
+                      value={videoUrl} onChange={e => detectVideo(e.target.value)} disabled={aiAutoFilling}/>
                     <button
                       className="vlbb"
                       style={{
@@ -2408,6 +2411,12 @@ export default function Home() {
                     <div className="detp">
                       <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                       {videoDetected}
+                    </div>
+                  )}
+                  {aiAutoFilling && (
+                    <div className="ai-inline-loading" role="status" aria-live="polite">
+                      <span className="processing-spinner" />
+                      Generating fields from the video. You can keep reviewing this page while we work.
                     </div>
                   )}
                   {aiAutoFillError && (

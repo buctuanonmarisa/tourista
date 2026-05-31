@@ -182,16 +182,19 @@ const extractJsonObject = (source: string, marker: string) => {
 // Extract video ID from YouTube URL
 function extractVideoId(url: string): string | null {
   try {
-    if (url.includes('youtu.be/')) {
-      return url.split('youtu.be/')[1]?.split('?')[0] || null
-    } else if (url.includes('youtube.com/watch?v=')) {
-      return url.split('v=')[1]?.split('&')[0] || null
-    } else if (url.includes('youtube.com/embed/')) {
-      return url.split('embed/')[1]?.split('?')[0] || null
+    const parsed = new URL(url)
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
+    if (host === 'youtu.be') return parsed.pathname.split('/').filter(Boolean)[0] || null
+    if (host.endsWith('youtube.com')) {
+      if (parsed.pathname === '/watch') return parsed.searchParams.get('v')
+      const parts = parsed.pathname.split('/').filter(Boolean)
+      if (['embed', 'shorts', 'live'].includes(parts[0])) return parts[1] || null
     }
-    return null
+    const loose = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{6,})/)
+    return loose?.[1] || null
   } catch {
-    return null
+    const loose = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{6,})/)
+    return loose?.[1] || null
   }
 }
 
@@ -292,6 +295,16 @@ async function fetchYouTubeMetadata(videoId: string) {
   }
 
   return metadata
+}
+
+function buildMinimalYouTubeMetadata(videoId: string, youtubeUrl: string): YouTubeMetadata {
+  return {
+    title: `YouTube travel vlog ${videoId}`,
+    author: 'YouTube creator',
+    thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+    description: `Auto-fill generated from YouTube URL: ${youtubeUrl}`,
+    keywords: [],
+  }
 }
 
 // Generate enhanced vlog content using Google Gemini AI
@@ -418,7 +431,13 @@ const conciseDetail = (value: unknown, fallbackEmoji: string) => {
   const text = compactWhitespace(String(value || ''))
   if (!text) return ''
 
-  const withoutDuplicateEmoji = text.startsWith(fallbackEmoji) ? text : `${fallbackEmoji} ${text}`
+  const normalized = text.startsWith(fallbackEmoji) ? text : `${fallbackEmoji} ${text}`
+  const withoutDuplicateEmoji = normalized
+    .replace(new RegExp(`^${fallbackEmoji}\\s+${fallbackEmoji}\\s+`), `${fallbackEmoji} `)
+    .replace(/^✨\s+[\u{1F300}-\u{1FAFF}]\uFE0F?\s+/u, '✨ ')
+    .replace(/^🍜\s+[\u{1F300}-\u{1FAFF}]\uFE0F?\s+/u, '🍜 ')
+    .replace(/^🚕\s+[\u{1F300}-\u{1FAFF}]\uFE0F?\s+/u, '🚕 ')
+    .replace(/^💡\s+[\u{1F300}-\u{1FAFF}]\uFE0F?\s+/u, '💡 ')
   const words = withoutDuplicateEmoji.split(' ')
   if (words.length <= 28) return withoutDuplicateEmoji
 
@@ -594,10 +613,7 @@ export async function POST(req: NextRequest) {
     try {
       metadata = await fetchYouTubeMetadata(videoId)
     } catch (error) {
-      return NextResponse.json(
-        { error: 'Failed to fetch YouTube video data. Please check the URL.' },
-        { status: 404 },
-      )
+      metadata = buildMinimalYouTubeMetadata(videoId, youtubeUrl)
     }
 
     let aiResponse
