@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import EmojiPicker from 'emoji-picker-react'
 import { DEFAULT_COUNTRY, FALLBACK_BUDGETS, FALLBACK_COUNTRIES, FALLBACK_VIBES } from '@/lib/travel-options'
 import TourMe from '@/modules/TourMe'
+import OnboardingTour from '@/components/OnboardingTour'
 
 /* ─── Types ──────────────────────────────────────────── */
 interface VlogAuthor {
@@ -1460,6 +1461,7 @@ export default function Home() {
   ══════════════════════════════════════════ */
   return (
     <>
+      <OnboardingTour />
       {(processingLabel || aiAutoFilling || publishing) && (
         <div className="processing-overlay" role="status" aria-live="polite">
           <div className="processing-card">
