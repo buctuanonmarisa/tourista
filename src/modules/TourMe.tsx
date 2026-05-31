@@ -200,16 +200,16 @@ interface CuratedCountryStop {
 }
 
 const CURATED_COUNTRY_STOPS: CuratedCountryStop[] = [
-  { country: 'Philippines', name: 'El Nido', lat: 11.17307562502276, lng: 119.3950475274839, streetLat: 11.1797, streetLng: 119.3908, reason: 'Island lagoons, limestone cliffs, and clear water' },
-  { country: 'Japan', name: 'Kyoto', lat: 34.97131910400563, lng: 135.77866553169181, streetLat: 34.9674, streetLng: 135.7727, reason: 'Temples, old streets, gardens, and seasonal beauty' },
-  { country: 'Thailand', name: 'Bangkok', lat: 13.753597290416279, lng: 100.49182275558415, streetLat: 13.7525, streetLng: 100.4941, reason: 'Street food, temples, markets, and nightlife' },
-  { country: 'Indonesia', name: 'Bali', lat: -8.590959828681374, lng: 115.08592107881513, streetLat: -8.5069, streetLng: 115.2625, reason: 'Beaches, rice terraces, temples, and surf culture' },
-  { country: 'France', name: 'Paris', lat: 48.859697126192614, lng: 2.2943954674158236, streetLat: 48.8584, streetLng: 2.2945, reason: 'Museums, cafes, architecture, and classic city walks' },
-  { country: 'Italy', name: 'Rome', lat: 41.89930661187925, lng: 12.477098843150232, streetLat: 41.8902, streetLng: 12.4922, reason: 'Ancient landmarks, piazzas, and food neighborhoods' },
-  { country: 'Greece', name: 'Santorini', lat: 36.41909126407468, lng: 25.43215848592153, streetLat: 36.4618, streetLng: 25.3753, reason: 'Caldera views, white villages, and sunset viewpoints' },
-  { country: 'USA', name: 'New York City', lat: 40.58698870663118, lng: -73.94609869695802, streetLat: 40.758, streetLng: -73.9855, reason: 'Skyline walks, food, museums, and city energy' },
-  { country: 'Canada', name: 'Banff', lat: 51.50475402823146, lng: -115.92736956972638, streetLat: 51.1784, streetLng: -115.5708, reason: 'Turquoise lakes, mountain trails, and wildlife views' },
-  { country: 'South Africa', name: 'Cape Town', lat: -33.891354246580676, lng: 18.42668549225774, streetLat: -33.9258, streetLng: 18.4232, reason: 'Table Mountain, coast roads, penguins, and wine country' },
+  { country: 'Philippines', name: 'El Nido', lat: 11.17307562502276, lng: 119.3950475274839, streetLat: 11.1797, streetLng: 119.3908, reason: '🌴🏝️ Discover breathtaking island lagoons, towering limestone cliffs, and crystal-clear turquoise waters that feel straight out of paradise. ✨' },
+  { country: 'Japan', name: 'Kyoto', lat: 34.97131910400563, lng: 135.77866553169181, streetLat: 34.9674, streetLng: 135.7727, reason: '⛩️🌸 Immerse yourself in ancient temples, charming traditional streets, serene zen gardens, and stunning seasonal beauty from cherry blossoms to autumn leaves. 🍁' },
+  { country: 'Thailand', name: 'Bangkok', lat: 13.753597290416279, lng: 100.49182275558415, streetLat: 13.7525, streetLng: 100.4941, reason: '🍜🛕 Experience world-famous street food, golden temples, bustling floating markets, and electrifying nightlife in this vibrant metropolis. 🌃' },
+  { country: 'Indonesia', name: 'Bali', lat: -8.590959828681374, lng: 115.08592107881513, streetLat: -8.5069, streetLng: 115.2625, reason: '🏄‍♀️🌺 Explore pristine beaches, emerald rice terraces, sacred Hindu temples, and world-class surf breaks in this tropical island paradise. 🌅' },
+  { country: 'France', name: 'Paris', lat: 48.859697126192614, lng: 2.2943954674158236, streetLat: 48.8584, streetLng: 2.2945, reason: '🗼☕ Wander through world-renowned museums, charming sidewalk cafes, stunning architecture, and romantic cobblestone streets in the City of Light. 💕' },
+  { country: 'Italy', name: 'Rome', lat: 41.89930661187925, lng: 12.477098843150232, streetLat: 41.8902, streetLng: 12.4922, reason: '🏛️🍝 Step back in time with ancient Roman landmarks, beautiful piazzas, authentic trattorias, and historic neighborhoods bursting with Italian charm. 🇮🇹' },
+  { country: 'Greece', name: 'Santorini', lat: 36.41909126407468, lng: 25.43215848592153, streetLat: 36.4618, streetLng: 25.3753, reason: '🌅🏛️ Marvel at dramatic caldera views, iconic white-washed villages, blue-domed churches, and the world\'s most spectacular sunset viewpoints. 💙' },
+  { country: 'USA', name: 'New York City', lat: 40.58698870663118, lng: -73.94609869695802, streetLat: 40.758, streetLng: -73.9855, reason: '🗽🌆 Experience the iconic skyline, diverse culinary scene, world-class museums, and unmatched energy of the city that never sleeps. ⚡' },
+  { country: 'Canada', name: 'Banff', lat: 51.50475402823146, lng: -115.92736956972638, streetLat: 51.1784, streetLng: -115.5708, reason: '🏔️💎 Discover stunning turquoise glacial lakes, breathtaking mountain trails, incredible wildlife encounters, and pristine Canadian Rockies wilderness. 🦌' },
+  { country: 'South Africa', name: 'Cape Town', lat: -33.891354246580676, lng: 18.42668549225774, streetLat: -33.9258, streetLng: 18.4232, reason: '🏔️🐧 Explore majestic Table Mountain, scenic coastal drives, adorable penguin colonies, and world-famous wine country all in one stunning destination. 🍷' },
 ]
 
 const makeTourAudioDataUrl = () => {
