@@ -72,7 +72,6 @@ const stripToJson = (value: string) => {
 const toDigits = (value: unknown) => String(value || '0').replace(/[^\d]/g, '')
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const TRANSCRIPT_PROMPT_LIMIT = 12000
-const PHOTOS_PER_ITINERARY_DAY = 5
 
 const htmlDecode = (value: string) =>
   value
@@ -196,74 +195,40 @@ function extractVideoId(url: string): string | null {
   }
 }
 
-const stableMediaLock = (value: string) =>
-  value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
-
 const splitPlaces = (value: unknown) =>
   String(value || '')
     .split(',')
     .map(item => compactWhitespace(item))
     .filter(Boolean)
 
-const mediaKeywords = (value: string) =>
-  compactWhitespace(value.replace(/[^\w\s,-]/g, ' '))
-    .split(/[\s,]+/)
-    .filter(word => word.length > 2)
-    .slice(0, 14)
-    .join(',')
+const generateItineraryMedia = (): Array<{ url: string; type: 'image' | 'video' }> => []
 
-const mediaSearchTerm = (day: GeneratedItineraryDay, fallbackPlace: string, country: string) =>
-  compactWhitespace([
-    day.activity,
-    day.highlights,
-    fallbackPlace,
-    country,
-    'travel',
-  ].filter(Boolean).join(' '))
-
-const destinationPhotoUrl = (term: string, place: string, country: string, dayIndex: number, photoIndex: number) => {
-  const photoThemes = ['landmark exterior', 'street scene', 'local food market', 'scenic viewpoint', 'nature landscape']
-  const theme = photoThemes[photoIndex % photoThemes.length]
-  const params = new URLSearchParams({
-    title: mediaKeywords(`${term}, travel photography`) || `${place} travel`,
-    place,
-    country,
-    theme,
-    day: String(dayIndex + 1),
-    seed: String(stableMediaLock(`${country}-${place}-${theme}-${term}-${dayIndex}-${photoIndex}`)),
-  })
-  return `/api/generated-travel-image?${params.toString()}`
+const assumedDayCostPhp = (country: string, dayIndex: number) => {
+  const baseByCountry: Record<string, number> = {
+    Philippines: 2800,
+    Japan: 8500,
+    Thailand: 3600,
+    Indonesia: 3400,
+    Vietnam: 3000,
+    Singapore: 9000,
+    USA: 11000,
+    Canada: 10000,
+    Australia: 10500,
+    France: 9500,
+    Italy: 9000,
+    Greece: 8500,
+    'United Kingdom': 10000,
+    Ecuador: 5200,
+    'South Africa': 5800,
+  }
+  const base = baseByCountry[country] || 5000
+  const multiplier = [1, 1.15, 0.9, 1.25, 1.05, 1.1, 0.95][dayIndex % 7]
+  return String(Math.round((base * multiplier) / 100) * 100)
 }
 
-const videoFrameStillUrls = (videoId: string, dayIndex: number) => {
-  return []
-}
-
-// Build a richer media set for each generated day without embedding unavailable search/video results.
-function generateItineraryMedia(
-  day: GeneratedItineraryDay,
-  index: number,
-  videoId: string,
-  country: string,
-  cities: unknown,
-): Array<{ url: string; type: 'image' | 'video' }> {
-  const places = splitPlaces(cities)
-  const fallbackPlace = places[index % Math.max(places.length, 1)] || country
-  const term = mediaSearchTerm(day, fallbackPlace, country)
-  const photos = Array.from({ length: PHOTOS_PER_ITINERARY_DAY }, (_, photoIndex) =>
-    destinationPhotoUrl(term, fallbackPlace, country, index, photoIndex),
-  )
-  const videoStills = videoFrameStillUrls(videoId, index)
-
-  const seen = new Set<string>()
-  return [
-    ...videoStills.map(url => ({ url, type: 'image' as const })),
-    ...photos.map(url => ({ url, type: 'image' as const })),
-  ].filter(item => {
-    if (seen.has(item.url)) return false
-    seen.add(item.url)
-    return true
-  })
+const dayCostOrAssumption = (day: GeneratedItineraryDay, country: string, index: number) => {
+  const cost = toDigits(day.cost || day.estimated_cost_php)
+  return cost && Number(cost) > 0 ? cost : assumedDayCostPhp(country, index)
 }
 
 // Fetch YouTube video metadata using oEmbed API (no API key needed)
@@ -509,7 +474,7 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
       food_tips: `🍜 Try local food near the route and verify specific restaurants from the creator's video notes.`,
       getting_there: `🚕 Cluster nearby stops, use rideshare or local transport, and check drive times before booking.`,
       tips: `💡 Start early, save offline maps, and confirm fees or opening hours before locking the plan.`,
-      estimated_cost_php: '0',
+      estimated_cost_php: assumedDayCostPhp(country, index),
     }
 
     return {
@@ -519,8 +484,8 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
       foodTips: conciseDetail(day.food_tips, '🍜'),
       gettingThere: conciseDetail(day.getting_there, '🚕'),
       tips: conciseDetail(day.tips, '💡'),
-      cost: '0',
-      media: generateItineraryMedia(day, index, videoId, country, cities.join(',')),
+      cost: dayCostOrAssumption(day, country, index),
+      media: generateItineraryMedia(),
     }
   })
 
@@ -532,8 +497,8 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
     vibe: '',
     coverImage: metadata.thumbnailUrl,
     duration,
-    estimatedCost: '0',
-    cost: '0',
+    estimatedCost: itinerary.reduce((sum, day) => sum + (parseInt(day.cost) || 0), 0).toString(),
+    cost: itinerary.reduce((sum, day) => sum + (parseInt(day.cost) || 0), 0).toString(),
     itinerary,
   }
 }
@@ -569,8 +534,8 @@ function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId:
       foodTips: conciseDetail(day.foodTips || day.food_tips, '🍜'),
       gettingThere: conciseDetail(day.gettingThere || day.getting_there, '🚕'),
       tips: conciseDetail(day.tips, '💡'),
-      cost: toDigits(day.cost || day.estimated_cost_php),
-      media: generateItineraryMedia(day, index, videoId, country, aiResponse.cities),
+      cost: dayCostOrAssumption(day, country, index),
+      media: generateItineraryMedia(),
     }))
 
   const itineraryTotal = itinerary.reduce((sum, day) => sum + (parseInt(day.cost) || 0), 0)

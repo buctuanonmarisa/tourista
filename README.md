@@ -36,3 +36,10 @@ For local development:
 ```bash
 npm run dev
 ```
+Test-NetConnection 16.176.165.19 -Port 22
+
+.\deploy-local-image.ps1 `
+  -HostName 16.176.165.19 `
+  -User ec2-user `
+  -KeyPath .\tourista-kp.pem `
+  -EnvFile .\.env.production

@@ -967,22 +967,20 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
         <aside className="tour-panel">
           <div className="tour-panel-sticky">
               <div className="tour-panel-head">
-                <div><div className="tour-kicker">{stage === 'world' ? 'Clip route finder' : 'Clips in this spot'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
+                <div className="tour-title-block"><div className="tour-kicker">{stage === 'world' ? 'Clip route finder' : 'Clips in this spot'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
+            {stage !== 'world' && (
+              <div className="tour-next-controls">
+                <button type="button" onClick={() => moveDestination(-1)} aria-label="Previous destination">
+                  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button type="button" onClick={() => moveDestination(1)} aria-label="Next destination">
+                  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            )}
             <button className="tour-close" onClick={onClose} aria-label="Close tour me">×</button>
           </div>
           <p className="tour-destination-summary">{displayedDescription}</p>
-          {stage !== 'world' && (
-            <div className="tour-next-controls">
-              <button type="button" onClick={() => moveDestination(-1)} aria-label="Previous destination">
-                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-                Prev
-              </button>
-              <button type="button" onClick={() => moveDestination(1)} aria-label="Next destination">
-                Next
-                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </div>
-          )}
           </div>
           {/* TikTok-style vertical scrolling clips */}
           {stage === 'place' && displayedAreaClips.length > 0 ? (

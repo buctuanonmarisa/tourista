@@ -201,6 +201,7 @@ export default function Home() {
   const [unlocked, setUnlocked] = useState(false)
   const [reviewText, setReviewText] = useState('')
   const [followStates, setFollowStates] = useState<Record<string, boolean>>({})
+  const [processingLabel, setProcessingLabel] = useState('')
 
   /* ─── Post form ─── */
   const [postStep, setPostStep] = useState(1)
@@ -398,16 +399,14 @@ export default function Home() {
     } finally { setVlogLoading(false) }
   }
 
-  const selectBrowseVlog = async (vlogId: string) => {
-    setPage('browse')
-    setActiveFeedId(vlogId)
+  const loadVlogDetail = async (vlogId: string) => {
     setVlog(null)
     setUnlocked(false)
     setReviewText('')
     setVlogLoading(true)
-    feedRefs.current[vlogId]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
     try {
       const r = await fetch(`/api/vlogs/${vlogId}`)
+      if (!r.ok) throw new Error('Failed to load vlog')
       const d: VlogDetail = await r.json()
       setVlog(d)
       setLikeCount(d.likes)
@@ -415,6 +414,28 @@ export default function Home() {
     } finally {
       setVlogLoading(false)
     }
+  }
+
+  const openAdjacentVlog = async (items: VlogCard[], currentId: string | null, direction: -1 | 1, scope: 'browse' | 'dashboard') => {
+    if (!currentId || !items.length) return
+    const index = items.findIndex(item => item.id === currentId)
+    const next = items[index + direction]
+    if (!next) return
+    if (scope === 'browse') {
+      setActiveFeedId(next.id)
+      feedRefs.current[next.id]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+    } else {
+      setSelectedMyVlogId(next.id)
+      setDashboardMode('details')
+    }
+    await loadVlogDetail(next.id)
+  }
+
+  const selectBrowseVlog = async (vlogId: string) => {
+    setPage('browse')
+    setActiveFeedId(vlogId)
+    feedRefs.current[vlogId]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+    await loadVlogDetail(vlogId)
   }
 
   /* ══════════════════════════════════════════
@@ -550,27 +571,42 @@ export default function Home() {
   const tLike = async () => {
     if (!vlog) return
     const next = !liked; setLiked(next); setLikeCount(c => next ? c + 1 : c - 1)
-    await fetch(`/api/vlogs/${vlog.id}/like`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ liked: next }),
-    })
+    setProcessingLabel(next ? 'Saving like...' : 'Removing like...')
+    try {
+      await fetch(`/api/vlogs/${vlog.id}/like`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ liked: next }),
+      })
+    } finally {
+      setProcessingLabel('')
+    }
   }
 
   const doUnlock = async () => {
     if (!vlog) return
-    await fetch(`/api/vlogs/${vlog.id}/unlock`, { method: 'POST' })
-    setUnlocked(true)
+    setProcessingLabel('Unlocking itinerary...')
+    try {
+      await fetch(`/api/vlogs/${vlog.id}/unlock`, { method: 'POST' })
+      setUnlocked(true)
+    } finally {
+      setProcessingLabel('')
+    }
   }
 
   const submitReview = async () => {
     if (!vlog || !reviewText.trim()) return
-    const r = await fetch(`/api/vlogs/${vlog.id}/reviews`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ authorName: profile?.name || 'You', rating: 5, text: reviewText }),
-    })
-    const nr: Review = await r.json()
-    setVlog(v => v ? { ...v, reviews: [nr, ...v.reviews] } : v)
-    setReviewText('')
+    setProcessingLabel('Posting review...')
+    try {
+      const r = await fetch(`/api/vlogs/${vlog.id}/reviews`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authorName: profile?.name || 'You', rating: 5, text: reviewText }),
+      })
+      const nr: Review = await r.json()
+      setVlog(v => v ? { ...v, reviews: [nr, ...v.reviews] } : v)
+      setReviewText('')
+    } finally {
+      setProcessingLabel('')
+    }
   }
 
   const tFollow = (id: string) => setFollowStates(p => ({ ...p, [id]: !p[id] }))
@@ -651,9 +687,16 @@ export default function Home() {
   const removeDayClipUrl = (dayIndex: number, clipIndex: number) => {
     setItinDays(days => days.map((day, index) => {
       if (index !== dayIndex) return day
-      const next = clipUrlsForDay(day).filter((_, itemIndex) => itemIndex !== clipIndex)
+      const current = clipUrlsForDay(day)
+      const removedUrl = current[clipIndex]
+      const next = current.filter((_, itemIndex) => itemIndex !== clipIndex)
       const clipUrls = next.length ? next : ['']
-      return { ...day, clipUrl: clipUrls[0] || '', clipUrls }
+      return {
+        ...day,
+        clipUrl: clipUrls[0] || '',
+        clipUrls,
+        media: removedUrl ? (day.media || []).filter(item => item.url !== removedUrl) : day.media,
+      }
     }))
   }
 
@@ -1141,21 +1184,59 @@ export default function Home() {
      Profile edit
   ══════════════════════════════════════════ */
   const saveProfile = async () => {
-    const response = await fetch('/api/profile', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(pForm),
-    })
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}))
-      window.alert(error.error || 'Failed to save profile. Please try again.')
-      return
+    setProcessingLabel('Saving profile...')
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pForm),
+      })
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        window.alert(error.error || 'Failed to save profile. Please try again.')
+        return
+      }
+      await fetchProfile(); go('dashboard')
+    } finally {
+      setProcessingLabel('')
     }
-    await fetchProfile(); go('dashboard')
+  }
+
+  const enhanceImageFile = async (file: File) => {
+    if (!file.type.startsWith('image/') || file.type === 'image/gif') return file
+    const bitmap = await createImageBitmap(file).catch(() => null)
+    if (!bitmap) return file
+
+    const maxWidth = 1800
+    const scale = Math.min(1, maxWidth / bitmap.width)
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+
+    ctx.filter = 'contrast(1.08) saturate(1.12) brightness(1.02)'
+    ctx.drawImage(bitmap, 0, 0, width, height)
+    ctx.filter = 'none'
+    ctx.globalAlpha = 0.18
+    ctx.drawImage(canvas, -1, 0)
+    ctx.drawImage(canvas, 1, 0)
+    ctx.drawImage(canvas, 0, -1)
+    ctx.drawImage(canvas, 0, 1)
+    ctx.globalAlpha = 1
+    ctx.drawImage(bitmap, 0, 0, width, height)
+
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.88))
+    bitmap.close()
+    if (!blob) return file
+    return new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg', lastModified: Date.now() })
   }
 
   const handleUpload = async (file: File) => {
     if (file.size > 25 * 1024 * 1024) throw new Error('File is too large. Please upload a file under 25MB.')
-    const fd = new FormData(); fd.append('file', file)
+    const uploadFile = await enhanceImageFile(file)
+    const fd = new FormData(); fd.append('file', uploadFile)
     const r = await fetch('/api/upload', { method: 'POST', body: fd })
     if (!r.ok) {
       const e = await r.json().catch(() => ({}))
@@ -1379,6 +1460,14 @@ export default function Home() {
   ══════════════════════════════════════════ */
   return (
     <>
+      {(processingLabel || aiAutoFilling || publishing) && (
+        <div className="processing-overlay" role="status" aria-live="polite">
+          <div className="processing-card">
+            <span className="processing-spinner" />
+            <strong>{processingLabel || (aiAutoFilling ? 'Generating with AI...' : publishing ? 'Publishing vlog...' : 'Processing...')}</strong>
+          </div>
+        </div>
+      )}
       <h2 className="sr-only">Tourista — travel vlog portal</h2>
 
       {/* ── NEW TOP NAVIGATION BAR ───────────────────────────────── */}
@@ -1597,10 +1686,10 @@ export default function Home() {
                     <div className="gi-panel-handle">{vlog.author.handle}</div>
                   </div>
                   <div className="gi-panel-nav">
-                    <button className="gi-panel-navbtn" title="Previous">
+                    <button className="gi-panel-navbtn" title="Previous" disabled={vlogs.findIndex(v => v.id === activeFeedId) <= 0} onClick={() => openAdjacentVlog(vlogs, activeFeedId, -1, 'browse')}>
                       <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                     </button>
-                    <button className="gi-panel-navbtn" title="Next">
+                    <button className="gi-panel-navbtn" title="Next" disabled={vlogs.findIndex(v => v.id === activeFeedId) < 0 || vlogs.findIndex(v => v.id === activeFeedId) >= vlogs.length - 1} onClick={() => openAdjacentVlog(vlogs, activeFeedId, 1, 'browse')}>
                       <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
                     </button>
                   </div>
@@ -2547,7 +2636,7 @@ export default function Home() {
                                   onChange={e => updateDayClipUrl(i, clipIndex, e.target.value)}
                                   onBlur={() => validateShortClipLink(i)}
                                 />
-                                {clipUrlsForDay(d).length > 1 && (
+                                {(clipUrlsForDay(d).length > 1 || clipUrl.trim()) && (
                                   <button type="button" className="clip-link-remove" aria-label="Remove clip link" onClick={() => removeDayClipUrl(i, clipIndex)}>
                                     x
                                   </button>
@@ -3116,40 +3205,10 @@ export default function Home() {
                             <div className="gi-panel-handle">{vlog.author.handle}</div>
                           </div>
                           <div className="gi-panel-nav">
-                            <button className="gi-panel-navbtn" title="Previous" onClick={() => {
-                              const idx = myVlogs.findIndex(v => v.id === selectedMyVlogId)
-                              if (idx > 0) {
-                                const prevVlog = myVlogs[idx - 1]
-                                setSelectedMyVlogId(prevVlog.id)
-                                setVlogLoading(true)
-                                fetch(`/api/vlogs/${prevVlog.id}`).then(r => r.json()).then(d => {
-                                  setVlog(d)
-                                  setLikeCount(d.likes)
-                                  setLiked(false)
-                                  setUnlocked(false)
-                                  setReviewText('')
-                                  setVlogLoading(false)
-                                })
-                              }
-                            }}>
+                            <button className="gi-panel-navbtn" title="Previous" disabled={myVlogs.findIndex(v => v.id === selectedMyVlogId) <= 0} onClick={() => openAdjacentVlog(myVlogs, selectedMyVlogId, -1, 'dashboard')}>
                               <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
                             </button>
-                            <button className="gi-panel-navbtn" title="Next" onClick={() => {
-                              const idx = myVlogs.findIndex(v => v.id === selectedMyVlogId)
-                              if (idx < myVlogs.length - 1) {
-                                const nextVlog = myVlogs[idx + 1]
-                                setSelectedMyVlogId(nextVlog.id)
-                                setVlogLoading(true)
-                                fetch(`/api/vlogs/${nextVlog.id}`).then(r => r.json()).then(d => {
-                                  setVlog(d)
-                                  setLikeCount(d.likes)
-                                  setLiked(false)
-                                  setUnlocked(false)
-                                  setReviewText('')
-                                  setVlogLoading(false)
-                                })
-                              }
-                            }}>
+                            <button className="gi-panel-navbtn" title="Next" disabled={myVlogs.findIndex(v => v.id === selectedMyVlogId) < 0 || myVlogs.findIndex(v => v.id === selectedMyVlogId) >= myVlogs.length - 1} onClick={() => openAdjacentVlog(myVlogs, selectedMyVlogId, 1, 'dashboard')}>
                               <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
                             </button>
                           </div>
