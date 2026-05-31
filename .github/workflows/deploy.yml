@@ -87,8 +87,21 @@ jobs:
             printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > "$HOME/tourista.env"
             chmod 600 "$HOME/tourista.env"
 
-            $DOCKER pull "$IMAGE_NAME:$IMAGE_TAG"
-            $DOCKER rm -f tourista-app || true
+            $DOCKER system df || true
+            $DOCKER builder prune -af || true
+            $DOCKER image prune -af || true
+
+            if ! $DOCKER pull "$IMAGE_NAME:$IMAGE_TAG"; then
+              echo "Initial image pull failed. Freeing space used by the current app image and retrying."
+              $DOCKER rm -f tourista-app || true
+              $DOCKER container prune -f || true
+              $DOCKER image prune -af || true
+              $DOCKER builder prune -af || true
+              $DOCKER pull "$IMAGE_NAME:$IMAGE_TAG"
+            else
+              $DOCKER rm -f tourista-app || true
+            fi
+
             $DOCKER volume create tourista_uploads >/dev/null
             $DOCKER run -d \
               --name tourista-app \
