@@ -326,8 +326,8 @@ TASK: Generate a JSON response with these exact fields:
 {
   "enhanced_title": "Catchy, SEO-friendly title (max 80 chars)",
   "description": "Engaging 3-4 sentence description highlighting what makes this trip special",
-  "country": "Country name (must be one of: ${countriesList})",
-  "cities": "Comma-separated list of 2-5 cities, islands, neighborhoods, or landmarks inferred from the title",
+  "country": "Comma-separated country names when the vlog covers multiple countries. Each country must be one of: ${countriesList}",
+  "cities": "Comma-separated list of 2-8 cities, islands, neighborhoods, landmarks, or places inferred from the title/transcript across all countries",
   "travel_vibes": ["Select 2-3 from: ${vibesList}"],
   "estimated_cost_php": "Estimated total trip cost in PHP (number only, e.g., 15000)",
   "estimated_days": "Trip duration in days (1-30)",
@@ -361,9 +361,9 @@ IMPORTANT:
 - Day 1 and Day 2 should be free-preview quality; later days can be premium detail
 - Include food_tips, getting_there, tips, highlights, activity, and estimated_cost_php for every day
 - Keep descriptions engaging and informative
-- **CRITICAL: The "country" field MUST match the actual country shown in the video. Analyze the title, description, keywords, and transcript carefully to identify the correct country. For example, if the video is about Egypt, the country MUST be "Egypt", NOT "Philippines". Only use "Philippines" as a fallback if no country can be determined from the video content.**
+- **CRITICAL: The "country" field MUST match the actual country or countries shown in the video. If the vlog crosses countries, return them as comma-separated values (example: "France, Italy, Switzerland"). Analyze the title, description, keywords, and transcript carefully. Only use "Philippines" as a fallback if no country can be determined from the video content.**
 - If the country is clearly mentioned in the title (e.g., "Egypt Travel Guide"), use that country
-- The cities field should contain cities from the identified country, not from a different country
+- The cities field should contain places from the identified country/countries, and multi-country videos may mix cities, islands, regions, and landmarks from each country
 - **EMOJIS ARE MANDATORY**: Every highlights, food_tips, getting_there, and tips field MUST start with relevant emojis and include emojis throughout to make content visually appealing
 - **BE SPECIFIC AND REALISTIC**: Include actual prices, specific locations, real transport options, and practical advice based on the destination
 - **MAKE IT ENGAGING**: Write like a travel blogger sharing insider tips, not a generic travel guide
@@ -425,7 +425,7 @@ const conciseDetail = (value: unknown, fallbackEmoji: string) => {
   return `${words.slice(0, 28).join(' ').replace(/[,.!?;:]*$/, '')}.`
 }
 
-const countryFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) => {
+const countriesFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) => {
   const metadataText = [
     metadata.title,
     metadata.keywords?.join(' '),
@@ -433,18 +433,31 @@ const countryFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'descript
   ].filter(Boolean).join(' ').toLowerCase()
 
   if (metadataText.includes('galapagos') || metadataText.includes('galápagos')) {
-    return 'Ecuador'
+    return ['Ecuador']
   }
 
-  const findCountry = (source: string) =>
-    FALLBACK_COUNTRIES.find(country => source.toLowerCase().includes(country.toLowerCase()))
+  const findCountries = (source: string) =>
+    FALLBACK_COUNTRIES.filter(country => source.toLowerCase().includes(country.toLowerCase()))
 
-  return (
-    findCountry(metadata.title || '') ||
-    findCountry(metadata.keywords?.join(' ') || '') ||
-    findCountry(metadata.description || '') ||
-    'Philippines'
-  )
+  const matches = [
+    ...findCountries(metadata.title || ''),
+    ...findCountries(metadata.keywords?.join(' ') || ''),
+    ...findCountries(metadata.description || ''),
+  ]
+
+  return Array.from(new Set(matches.length ? matches : ['Philippines']))
+}
+
+const countryFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) =>
+  countriesFromMetadata(metadata)[0] || 'Philippines'
+
+const normalizeCountries = (value: unknown, metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) => {
+  const requested = splitPlaces(value)
+  const matched = requested
+    .map(country => FALLBACK_COUNTRIES.find(option => option.toLowerCase() === country.toLowerCase()) || country)
+    .filter(country => FALLBACK_COUNTRIES.includes(country))
+  const fallback = countriesFromMetadata(metadata)
+  return Array.from(new Set(matched.length ? matched : fallback))
 }
 
 const cityOptionsForCountry: Record<string, string[]> = {
@@ -462,8 +475,10 @@ const cityOptionsForCountry: Record<string, string[]> = {
 }
 
 function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
-  const country = countryFromMetadata(metadata)
-  const cities = cityOptionsForCountry[country] || [country]
+  const countries = countriesFromMetadata(metadata)
+  const country = countries.join(', ')
+  const primaryCountry = countries[0] || 'Philippines'
+  const cities = Array.from(new Set(countries.flatMap(countryName => cityOptionsForCountry[countryName] || [countryName])))
   const duration = 3
   const itinerary = Array.from({ length: duration }, (_, index) => {
     const place = cities[index % cities.length]
@@ -474,7 +489,7 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
       food_tips: `🍜 Try local food near the route and verify specific restaurants from the creator's video notes.`,
       getting_there: `🚕 Cluster nearby stops, use rideshare or local transport, and check drive times before booking.`,
       tips: `💡 Start early, save offline maps, and confirm fees or opening hours before locking the plan.`,
-      estimated_cost_php: assumedDayCostPhp(country, index),
+      estimated_cost_php: assumedDayCostPhp(primaryCountry, index),
     }
 
     return {
@@ -484,7 +499,7 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
       foodTips: conciseDetail(day.food_tips, '🍜'),
       gettingThere: conciseDetail(day.getting_there, '🚕'),
       tips: conciseDetail(day.tips, '💡'),
-      cost: dayCostOrAssumption(day, country, index),
+      cost: dayCostOrAssumption(day, primaryCountry, index),
       media: generateItineraryMedia(),
     }
   })
@@ -505,18 +520,9 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
 
 // Validate and clean AI response
 function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId: string) {
-  // Try to extract country from video title if AI response is invalid
-  let country = aiResponse.country
-
-  // Check if the AI-provided country is valid
-  if (!FALLBACK_COUNTRIES.includes(country)) {
-    // Try to extract country from title
-    const titleLower = metadata.title.toLowerCase()
-    const foundCountry = FALLBACK_COUNTRIES.find(c =>
-      titleLower.includes(c.toLowerCase())
-    )
-    country = foundCountry || countryFromMetadata(metadata)
-  }
+  const countries = normalizeCountries(aiResponse.country, metadata)
+  const country = countries.join(', ')
+  const primaryCountry = countries[0] || countryFromMetadata(metadata)
 
   const vibes = Array.isArray(aiResponse.travel_vibes)
     ? aiResponse.travel_vibes.filter((v: string) => FALLBACK_VIBES.includes(v)).slice(0, 3)
@@ -534,7 +540,7 @@ function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId:
       foodTips: conciseDetail(day.foodTips || day.food_tips, '🍜'),
       gettingThere: conciseDetail(day.gettingThere || day.getting_there, '🚕'),
       tips: conciseDetail(day.tips, '💡'),
-      cost: dayCostOrAssumption(day, country, index),
+      cost: dayCostOrAssumption(day, primaryCountry, index),
       media: generateItineraryMedia(),
     }))
 

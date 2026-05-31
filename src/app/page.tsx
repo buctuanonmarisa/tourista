@@ -221,6 +221,8 @@ export default function Home() {
   const [postView, setPostView] = useState<'form' | 'drafts'>('form')
   const [vibeInput, setVibeInput] = useState('')
   const [vibeFocused, setVibeFocused] = useState(false)
+  const [countryInput, setCountryInput] = useState('')
+  const [countryFocused, setCountryFocused] = useState(false)
   const [cityInput, setCityInput] = useState('')
   const [cityFocused, setCityFocused] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState<Record<string, boolean>>({})
@@ -1383,6 +1385,10 @@ export default function Home() {
     : []
   const countryFilters = countryOptions.filter(c => c !== 'All countries' && c !== 'All regions')
   const budgetFilters = budgetOptions.filter(b => b !== 'Any budget' && b !== 'Free vlogs only')
+  const selectedPostCountries = postForm.country.split(',').map(c => c.trim()).filter(Boolean)
+  const postCountryCityOptions = Array.from(new Set(
+    selectedPostCountries.flatMap(country => CITIES_BY_COUNTRY[country] || []),
+  ))
   const updCr = (v: number) => {
     setPostForm(f => ({ ...f, credits: v }))
   }
@@ -2478,10 +2484,65 @@ export default function Home() {
                 </div>
                 <div className="fr">
                   <div className="fg">
-                    <label>Country</label>
-                    <select className="fi" value={postForm.country} onChange={e => setPostForm(f => ({ ...f, country: e.target.value }))}>
-                      {countryOptions.map(c => <option key={c}>{c}</option>)}
-                    </select>
+                    <label>Countries</label>
+                    <div className="vti">
+                      {selectedPostCountries.map(country => (
+                        <span key={country} className="vtag">
+                          {country}
+                          <button type="button" className="vtag-x" onClick={() => {
+                            const countries = selectedPostCountries.filter(c => c !== country)
+                            setPostForm(f => ({ ...f, country: countries.length ? countries.join(', ') : DEFAULT_COUNTRY }))
+                          }}>×</button>
+                        </span>
+                      ))}
+                      <div className="vti-wrap">
+                        <input
+                          type="text"
+                          className="vti-in"
+                          placeholder={selectedPostCountries.length ? '' : 'Search countries...'}
+                          value={countryInput}
+                          onChange={e => setCountryInput(e.target.value)}
+                          onFocus={() => setCountryFocused(true)}
+                          onBlur={() => { setTimeout(() => setCountryFocused(false), 150) }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && countryInput.trim()) {
+                              e.preventDefault()
+                              const match = countryOptions.find(c => c.toLowerCase() === countryInput.trim().toLowerCase())
+                              const val = match || countryInput.trim()
+                              if (!selectedPostCountries.includes(val)) {
+                                setPostForm(f => ({ ...f, country: [...selectedPostCountries, val].join(', ') }))
+                              }
+                              setCountryInput('')
+                            }
+                          }}
+                        />
+                        {countryFocused && (() => {
+                          const opts = countryOptions
+                            .filter(c => c !== 'All countries' && c !== 'All regions')
+                            .filter(c => !selectedPostCountries.includes(c) && (!countryInput || c.toLowerCase().includes(countryInput.toLowerCase())))
+                          return opts.length > 0 || countryInput.trim() ? (
+                            <div className="vdrop">
+                              {opts.map(c => (
+                                <div key={c} className="vopt" onMouseDown={() => {
+                                  setPostForm(f => ({ ...f, country: [...selectedPostCountries, c].join(', ') }))
+                                  setCountryInput('')
+                                }}>
+                                  {c}
+                                </div>
+                              ))}
+                              {countryInput.trim() && !opts.find(c => c.toLowerCase() === countryInput.toLowerCase()) && (
+                                <div className="vopt" onMouseDown={() => {
+                                  setPostForm(f => ({ ...f, country: [...selectedPostCountries, countryInput.trim()].join(', ') }))
+                                  setCountryInput('')
+                                }} style={{ fontWeight: 600, color: 'var(--g)' }}>
+                                  + Add &quot;{countryInput.trim()}&quot; as custom country
+                                </div>
+                              )}
+                            </div>
+                          ) : null
+                        })()}
+                      </div>
+                    </div>
                   </div>
                   <div className="fg">
                     <label>Cities / locations</label>
@@ -2508,7 +2569,7 @@ export default function Home() {
                             if (e.key === 'Enter' && cityInput.trim()) {
                               e.preventDefault()
                               const existing = postForm.cities.split(',').filter(Boolean)
-                              const match = (CITIES_BY_COUNTRY[postForm.country] || []).find(c => c.toLowerCase() === cityInput.trim().toLowerCase())
+                              const match = postCountryCityOptions.find(c => c.toLowerCase() === cityInput.trim().toLowerCase())
                               const val = match || cityInput.trim()
                               if (!existing.includes(val)) {
                                 setPostForm(f => ({ ...f, cities: [...existing, val].join(',') }))
@@ -2519,7 +2580,7 @@ export default function Home() {
                         />
                         {(cityFocused) && (() => {
                           const existing = postForm.cities.split(',').filter(Boolean)
-                          const availableCities = CITIES_BY_COUNTRY[postForm.country] || []
+                          const availableCities = postCountryCityOptions
                           const opts = availableCities.filter(c => !existing.includes(c) && (!cityInput || c.toLowerCase().includes(cityInput.toLowerCase())))
                           return opts.length > 0 || cityInput.trim() ? (
                             <div className="vdrop">

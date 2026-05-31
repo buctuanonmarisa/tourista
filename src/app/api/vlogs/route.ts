@@ -170,7 +170,12 @@ export async function GET(req: NextRequest) {
   }
   const selectedCountries = country.split(',').map(c => c.trim()).filter(c => c && c !== 'All countries' && c !== 'All regions')
   if (selectedCountries.length) {
-    andFilters.push({ OR: selectedCountries.map(c => ({ country: c })) })
+    andFilters.push({
+      OR: selectedCountries.flatMap(c => [
+        { country: { contains: c, mode: 'insensitive' as const } },
+        { location: { contains: c, mode: 'insensitive' as const } },
+      ]),
+    })
   }
 
   if (budget && budget !== 'Any budget') {
@@ -237,8 +242,14 @@ export async function POST(req: NextRequest) {
     const stripNonDigit = (s: string) => parseInt(String(s).replace(/[^\d]/g, '') || '0')
     const allowedCountries = await loadOptionLabels('country', FALLBACK_COUNTRIES)
     const allowedVibes = await loadOptionLabels('vibe', FALLBACK_VIBES)
-    const requestedCountry = typeof body.country === 'string' ? body.country.trim() : ''
-    const country = allowedCountries.includes(requestedCountry) ? requestedCountry : DEFAULT_COUNTRY
+    const requestedCountries = typeof body.country === 'string'
+      ? body.country.split(',').map((country: string) => country.trim()).filter(Boolean)
+      : []
+    const countries = requestedCountries
+      .map((requested: string) => allowedCountries.find(country => country.toLowerCase() === requested.toLowerCase()) || requested)
+      .filter(Boolean)
+    const country = countries.length ? Array.from(new Set(countries)).join(', ') : DEFAULT_COUNTRY
+    const primaryCountry = country.split(',')[0]?.trim() || DEFAULT_COUNTRY
     const locationBase = body.city || body.cities || body.location || 'Unknown'
     const requestedVibes = String(body.vibe || '')
       .split(',')
@@ -246,7 +257,7 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
     const vibe = requestedVibes.filter(v => allowedVibes.includes(v)).join(',') || allowedVibes[0] || 'All vlogs'
     const title = body.title || 'Untitled Vlog'
-    const fallbackCoverImage = generatedCoverImage(title, locationBase, country)
+    const fallbackCoverImage = generatedCoverImage(title, locationBase, primaryCountry)
 
     const vlog = await prisma.vlog.create({
       data: {
