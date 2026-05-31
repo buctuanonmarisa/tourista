@@ -16,6 +16,21 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-NativeCommand {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$Command,
+
+    [Parameter(ValueFromRemainingArguments=$true)]
+    [string[]]$Arguments
+  )
+
+  & $Command @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Command failed with exit code $LASTEXITCODE"
+  }
+}
+
 if (!(Test-Path -LiteralPath $KeyPath)) {
   throw "SSH key not found: $KeyPath"
 }
@@ -30,14 +45,14 @@ $remoteImage = "/home/$User/tourista-ec2-image.tar"
 $remoteEnv = "/home/$User/tourista.env"
 
 Write-Host "Building Linux AMD64 Docker image: $ImageName"
-docker buildx build --platform linux/amd64 --load -t $ImageName $workspace
+Invoke-NativeCommand -Command docker -Arguments @("buildx", "build", "--platform", "linux/amd64", "--load", "-t", $ImageName, $workspace)
 
 Write-Host "Saving image to $tarPath"
-docker save -o $tarPath $ImageName
+Invoke-NativeCommand -Command docker -Arguments @("save", "-o", $tarPath, $ImageName)
 
 Write-Host "Uploading image and env file to $User@$HostName"
-scp -i $KeyPath $tarPath "${User}@${HostName}:$remoteImage"
-scp -i $KeyPath $EnvFile "${User}@${HostName}:$remoteEnv"
+Invoke-NativeCommand -Command scp -Arguments @("-i", $KeyPath, $tarPath, "${User}@${HostName}:$remoteImage")
+Invoke-NativeCommand -Command scp -Arguments @("-i", $KeyPath, $EnvFile, "${User}@${HostName}:$remoteEnv")
 
 $remoteScript = @"
 set -eu
@@ -58,5 +73,8 @@ docker ps --filter "name=$ContainerName"
 
 Write-Host "Starting container on EC2"
 $remoteScript | ssh -i $KeyPath "${User}@${HostName}" "bash -s"
+if ($LASTEXITCODE -ne 0) {
+  throw "ssh failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Done. Open: http://$HostName"
