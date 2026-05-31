@@ -1488,7 +1488,7 @@ export default function Home() {
           </div>
 
           {/* Search Bar */}
-          <div className="tn-search">
+          <div className="tn-search" data-tour="search-filter">
             <div className="tn-search-icon">
               <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             </div>
@@ -1515,15 +1515,15 @@ export default function Home() {
               <span className="tn-btn-label">Notifications</span>
               {nCnt > 0 && <span className="tn-dot"/>}
             </button>
-            <button className="tn-btn" onClick={() => go('dashboard')} aria-label="Dashboard">
+            <button className="tn-btn" onClick={() => go('dashboard')} aria-label="Dashboard" data-tour="dashboard">
               <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
               <span className="tn-btn-label">Dashboard</span>
             </button>
-            <button className="tn-btn tn-tour" onClick={openTourMe} aria-label="Tour me">
+            <button className="tn-btn tn-tour" onClick={openTourMe} aria-label="Tour me" data-tour="tourme">
               <svg viewBox="0 0 24 24"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
               <span className="tn-btn-label">Tour me</span>
             </button>
-            <button className="tn-btn tn-post" onClick={() => {
+            <button className="tn-btn tn-post" data-tour="post-vlog" onClick={() => {
               setPostForm({ ...defaultPostForm })
               setVideoUrl(''); setVideoDetected(''); setAltLinks({ fb:'', tt:'', ig:'' })
               setItinDays(defaultItinDays.map(d => ({ ...d }))); setPostStep(1); setPublishError('')
@@ -1589,30 +1589,21 @@ export default function Home() {
               {activeFilterTab === 'vibe' && (
                 <>
                   {vibeOptions.map(v => (
-                    <span key={v} className={`fb-chip${selectedVibes.includes(v) ? ' on' : ''}`} onClick={() => toggleVibeFilter(v)}>
-                      <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%232A7A50" width="100" height="100"/></svg>')`}}/>
-                      {v}
-                    </span>
+                    <span key={v} className={`fb-chip${selectedVibes.includes(v) ? ' on' : ''}`} onClick={() => toggleVibeFilter(v)}>{v}</span>
                   ))}
                 </>
               )}
               {activeFilterTab === 'country' && (
                 <>
                   {countryFilters.map(c => (
-                    <span key={c} className={`fb-chip${selectedCountries.includes(c) ? ' on' : ''}`} onClick={() => toggleCountryFilter(c)}>
-                      <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="%230876A8"/></svg>')`}}/>
-                      {c}
-                    </span>
+                    <span key={c} className={`fb-chip${selectedCountries.includes(c) ? ' on' : ''}`} onClick={() => toggleCountryFilter(c)}>{c}</span>
                   ))}
                 </>
               )}
               {activeFilterTab === 'budget' && (
                 <>
                   {budgetFilters.map(b => (
-                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(budget === b ? '' : b)}>
-                      <span className="fb-chip-img" style={{backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23D08A0A" width="100" height="100"/></svg>')`}}/>
-                      {b}
-                    </span>
+                    <span key={b} className={`fb-chip${budget === b ? ' on' : ''}`} onClick={() => setBudget(budget === b ? '' : b)}>{b}</span>
                   ))}
                 </>
               )}
@@ -1648,6 +1639,7 @@ export default function Home() {
                     <div
                       key={v.id}
                       className={`gi-card${isActive ? ' on' : ''}`}
+                      data-tour={vlogs.indexOf(v) === 0 ? 'video-card' : undefined}
                       data-vlog-id={v.id}
                       ref={node => { feedRefs.current[v.id] = node }}
                       onClick={() => selectBrowseVlog(v.id)}
@@ -1667,6 +1659,28 @@ export default function Home() {
                           </>
                         )}
                         {v.credits > 0 && <div className="gi-cred-badge">✦ {v.credits}</div>}
+                        <div className="gi-card-gradient" />
+                        <div className="gi-card-copy">
+                          <div className="gi-card-author">
+                            <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
+                            <span>{v.author.handle}</span>
+                          </div>
+                          <div className="gi-card-title">{v.title}</div>
+                          <div className="gi-card-meta">{v.location}</div>
+                        </div>
+                        <div className="gi-card-actions" aria-hidden="true">
+                          <span>
+                            <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                            {fmtShortNumber(v.likes)}
+                          </span>
+                          <span>
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                            {fmtShortNumber(v.views)}
+                          </span>
+                          <span>
+                            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                          </span>
+                        </div>
                       </div>
                       <div className="gi-title">{v.title}</div>
                       <div className="gi-info">
@@ -3176,6 +3190,28 @@ export default function Home() {
                           </div>
                         </div>
                         {v.credits > 0 ? <div className="gi-cred-badge">{v.credits} unlocks</div> : <div className="gi-cred-badge free">Free</div>}
+                        <div className="gi-card-gradient" />
+                        <div className="gi-card-copy">
+                          <div className="gi-card-author">
+                            <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
+                            <span>{v.author.handle}</span>
+                          </div>
+                          <div className="gi-card-title">{v.title}</div>
+                          <div className="gi-card-meta">{fmtShortNumber(v.views)} views</div>
+                        </div>
+                        <div className="gi-card-actions" aria-hidden="true">
+                          <span>
+                            <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                            {fmtShortNumber(v.likes)}
+                          </span>
+                          <span>
+                            <svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                            {fmtShortNumber(v.views)}
+                          </span>
+                          <span>
+                            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                          </span>
+                        </div>
                       </div>
                       <div className="gi-title">{v.title}</div>
                       <div className="gi-info">
