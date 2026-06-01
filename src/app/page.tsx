@@ -186,6 +186,8 @@ export default function Home() {
   const [vibeOptions, setVibeOptions] = useState(FALLBACK_VIBES)
   const [budgetOptions, setBudgetOptions] = useState(FALLBACK_BUDGETS)
   const [filtersOpen, setFiltersOpen] = useState(true)
+  const [darkMode, setDarkMode] = useState(false)
+  const [themeReady, setThemeReady] = useState(false)
   const [activeFeedId, setActiveFeedId] = useState<string | null>(null)
   const feedRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
@@ -320,6 +322,24 @@ export default function Home() {
   useEffect(() => { fetchMyVlogs() }, [fetchMyVlogs])
   useEffect(() => { fetchProfile() }, [fetchProfile])
   useEffect(() => { fetchTravelOptions() }, [fetchTravelOptions])
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('tourista_theme')
+      const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
+      setDarkMode(saved ? saved === 'dark' : Boolean(prefersDark))
+    } catch {
+      setDarkMode(false)
+    } finally {
+      setThemeReady(true)
+    }
+  }, [])
+  useEffect(() => {
+    if (!themeReady) return
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'
+    try {
+      localStorage.setItem('tourista_theme', darkMode ? 'dark' : 'light')
+    } catch { /* storage unavailable */ }
+  }, [darkMode, themeReady])
   useEffect(() => {
     if (!activeFeedId) return
     if (!vlogs.some(v => v.id === activeFeedId)) {
@@ -1516,6 +1536,20 @@ export default function Home() {
 
           {/* Action Buttons */}
           <div className="tn-actions">
+            <button
+              type="button"
+              className={`theme-toggle${darkMode ? ' on' : ''}`}
+              onClick={() => setDarkMode(value => !value)}
+              aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={darkMode ? 'Light mode' : 'Dark mode'}
+              data-tour="dark-mode"
+            >
+              {darkMode ? (
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+              ) : (
+                <svg viewBox="0 0 24 24"><path d="M21 12.8A8.6 8.6 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z"/></svg>
+              )}
+            </button>
             <button className="tn-btn" onClick={() => go('notif')} aria-label="Notifications">
               <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
               <span className="tn-btn-label">Notifications</span>
@@ -1891,8 +1925,30 @@ export default function Home() {
                       <div className="gi-panel-more-lbl">More from {vlog.author.handle}</div>
                       <div className="gi-panel-more-grid">
                         {relatedCreatorVlogs.map(v => (
-                          <div key={v.id} className="gi-panel-more-card" onClick={() => selectBrowseVlog(v.id)}>
-                            <div className={`gi-thumb ${v.thumbnailColor}`} style={{ backgroundImage: `url('${coverForVlog(v)}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}/>
+                          <div key={v.id} className="gi-card gi-panel-more-card" onClick={() => selectBrowseVlog(v.id)}>
+                            <div className={`gi-thumb ${v.thumbnailColor}`}>
+                              <img src={coverForVlog(v)} alt={v.title}/>
+                              <div className="gi-card-gradient" />
+                              <div className="gi-card-copy">
+                                <div className="gi-card-title">{v.title}</div>
+                                <div className="gi-card-meta">{v.location}</div>
+                              </div>
+                              <div className="gi-card-actions" aria-label={`${v.likes} likes and ${v.views} views`}>
+                                <span>
+                                  <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                  {fmtShortNumber(v.likes)}
+                                </span>
+                                <span>
+                                  <svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                                  {fmtShortNumber(v.views)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="gi-title">{v.title}</div>
+                            <div className="gi-info">
+                              <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
+                              <div className="gi-info-handle">{v.author.handle}</div>
+                            </div>
                           </div>
                         ))}
                       </div>

@@ -23,6 +23,14 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'step-2',
+    target: '[data-tour="dark-mode"]',
+    kicker: 'Set the mood',
+    title: 'Switch dark mode any time',
+    content: 'Use this toggle whenever you want a darker, softer interface for browsing maps, clips, dashboards, and creator tools.',
+    position: 'bottom',
+  },
+  {
+    id: 'step-3',
     target: '[data-tour="video-card"]',
     kicker: 'Open the story',
     title: 'Click a video card',
@@ -30,7 +38,7 @@ const TOUR_STEPS: TourStep[] = [
     position: 'right',
   },
   {
-    id: 'step-3',
+    id: 'step-4',
     target: '[data-tour="tourme"]',
     kicker: 'Personal guide',
     title: 'Try TourMe',
@@ -38,7 +46,7 @@ const TOUR_STEPS: TourStep[] = [
     position: 'bottom',
   },
   {
-    id: 'step-4',
+    id: 'step-5',
     target: '[data-tour="post-vlog"]',
     kicker: 'Creator mode',
     title: 'Create a vlog with AI',
@@ -46,7 +54,7 @@ const TOUR_STEPS: TourStep[] = [
     position: 'left',
   },
   {
-    id: 'step-5',
+    id: 'step-6',
     target: '[data-tour="dashboard"]',
     kicker: 'See performance',
     title: 'Dashboard and earnings',

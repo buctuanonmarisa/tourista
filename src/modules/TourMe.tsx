@@ -551,7 +551,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const selectedDestination = destinations.find(destination => destination.id === vlogId) || topDestination
   const displayedDestination = stage === 'world' ? topDestination : selectedDestination
   const displayedDescription = stage === 'world'
-    ? 'A 10-stop world route built from Tourista creator recommendations. Start at the first stop, then follow each pin in order.'
+    ? `These are the best spots in the country right now, ranked from live Tourista creator data. The route updates as views, likes, trending clips, and itineraries change. Click any pin to start your tour.`
     : conciseDestinationCopy(selectedDestination)
   const itinerary = detail && selectedDestination && detail.id === selectedDestination.id ? detail.itinerary : []
   const mapTarget = selectedDestination || { lat: 14.5995, lng: 120.9842 }
@@ -853,11 +853,11 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
               </div>
               <svg className="tour-world-route" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                 <defs>
-                  <marker id="tourRouteArrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto">
-                    <path d="M 0 1.5 L 8 5 L 0 8.5" fill="none" stroke="#ef4444" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  <marker id="tourRouteArrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="2.2" markerHeight="2.2" orient="auto">
+                    <path d="M 0 1.5 L 8 5 L 0 8.5" fill="none" stroke="#ef4444" strokeWidth=".8" strokeLinecap="round" strokeLinejoin="round" />
                   </marker>
-                  <marker id="tourRouteArrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto">
-                    <path d="M 0 1.5 L 8 5 L 0 8.5" fill="none" stroke="#14b8a6" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  <marker id="tourRouteArrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="2.2" markerHeight="2.2" orient="auto">
+                    <path d="M 0 1.5 L 8 5 L 0 8.5" fill="none" stroke="#14b8a6" strokeWidth=".8" strokeLinecap="round" strokeLinejoin="round" />
                   </marker>
                 </defs>
                 {travelCue && travelCue.fromDest && travelCue.toDest && (
@@ -898,7 +898,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
               <div className="tour-plane" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
               </div>
-              <div className="tour-scan-card"><strong>Connected routes</strong><span>Follow the arrows between pinned destinations</span></div>
+              <div className="tour-scan-card"><strong>Click a pin to start</strong><span>Your first stop begins the TourMe adventure</span></div>
             </div>
           ) : (
             <>
@@ -967,7 +967,11 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
         <aside className="tour-panel">
           <div className="tour-panel-sticky">
               <div className="tour-panel-head">
-                <div className="tour-title-block"><div className="tour-kicker">{stage === 'world' ? 'Clip route finder' : 'Clips in this spot'}</div><h2>{displayedDestination?.name || 'Live destinations'}</h2><p>{displayedDestination ? `${displayedDestination.city}, ${displayedDestination.country}` : 'Loading Tourista vlogs'}</p></div>
+                <div className="tour-title-block">
+                  <div className="tour-kicker">{stage === 'world' ? 'TourMe Adventure' : `Fun things to explore in ${displayedDestination?.name || 'this spot'}`}</div>
+                  <h2>{stage === 'world' ? 'Start with the best spots' : (displayedDestination?.name || 'Live destinations')}</h2>
+                  <p>{stage === 'world' ? 'Pick a pin and let the country route unfold from real creator data.' : `${displayedDestination?.city}, ${displayedDestination?.country}`}</p>
+                </div>
             {stage !== 'world' && (
               <div className="tour-next-controls">
                 <button type="button" onClick={() => moveDestination(-1)} aria-label="Previous destination">
