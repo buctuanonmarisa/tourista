@@ -543,9 +543,9 @@ textarea.fi{resize:vertical;min-height:84px;line-height:1.65}
 .tour-globe-map{position:absolute;inset:0;border-radius:50%;overflow:hidden;background:#cfe5ee;box-shadow:inset -42px 0 68px rgba(13,32,24,.28),inset 24px 0 48px rgba(255,255,255,.34),0 28px 68px rgba(13,32,24,.24);animation:tourGlobeSurface 10s ease-in-out both}
 .tour-globe-map:after{content:"";position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 26%,rgba(255,255,255,.42),rgba(255,255,255,0) 30%),linear-gradient(90deg,rgba(0,0,0,.18),transparent 36%,rgba(255,255,255,.18) 58%,rgba(0,0,0,.3));pointer-events:none}
 .tour-globe-strip{position:absolute;inset:0;animation:tourGlobeScroll 10s linear both}
-.tour-globe-strip img{position:absolute;width:50%;height:50%;object-fit:cover;filter:saturate(1.08) contrast(1.05)}
+.tour-globe-strip img{position:absolute;width:calc(50% + 1px);height:calc(50% + 1px);object-fit:cover;filter:saturate(1.08) contrast(1.05);transform:translateZ(0)}
 .tour-world-map{position:absolute;inset:0;z-index:1;background:#cfe5ee;opacity:0;animation:tourWorldSettle 10s ease both}
-.tour-world-map img{position:absolute;width:50%;height:50%;object-fit:cover;filter:saturate(1.05) contrast(1.05)}
+.tour-world-map img{position:absolute;width:calc(50% + 1px);height:calc(50% + 1px);object-fit:cover;filter:saturate(1.05) contrast(1.05);transform:translateZ(0)}
 .tour-world-route{position:absolute;left:50%;top:50%;z-index:3;width:min(96%,900px);height:auto;transform:translate(-50%,-50%);filter:drop-shadow(0 8px 14px rgba(13,32,24,.13));pointer-events:none}
 .tour-route-leg{opacity:0;animation:fadeIn .5s ease forwards;animation-delay:calc(var(--leg-order) * .58s + 2.9s)}
 .tour-route-underlay{fill:none;stroke:rgba(255,255,255,.68);stroke-width:1.65;stroke-linecap:round}
@@ -573,6 +573,8 @@ textarea.fi{resize:vertical;min-height:84px;line-height:1.65}
 .tour-pin.hot{background:#ef4444;color:#fff;width:40px;height:40px;z-index:4;animation:tourPinDrop .52s cubic-bezier(.18,.82,.22,1) forwards,tourHotPin 1.4s ease-in-out infinite;animation-delay:calc(var(--pin-order) * .34s + 2.35s),calc(var(--pin-order) * .34s + 2.95s)}
 .tour-pin.travel-from{background:#14b8a6;color:#fff;width:40px;height:40px;z-index:5;opacity:1;animation:tourPinPulse 1.2s ease-in-out infinite}
 .tour-pin.travel-to{background:#ef4444;color:#fff;width:40px;height:40px;z-index:5;opacity:1;animation:tourPinPulse 1.2s ease-in-out infinite;animation-delay:.3s}
+.tour-pin-tooltip{position:absolute;z-index:8;transform:translate(-8px,-100%);max-width:210px;border:1px solid rgba(255,255,255,.78);border-radius:999px;background:rgba(13,32,24,.9);color:#fff;padding:9px 13px;font-size:12px;font-weight:900;box-shadow:0 14px 34px rgba(13,32,24,.28);pointer-events:none;animation:tourTooltipPulse 1.9s ease-in-out infinite}
+.tour-pin-tooltip:after{content:"";position:absolute;left:16px;bottom:-6px;width:12px;height:12px;background:rgba(13,32,24,.9);border-right:1px solid rgba(255,255,255,.6);border-bottom:1px solid rgba(255,255,255,.6);transform:rotate(45deg)}
 @keyframes tourPinPulse{0%,100%{transform:translate(-50%,-100%) scale(1);box-shadow:0 8px 20px rgba(13,32,24,.22)}50%{transform:translate(-50%,-100%) scale(1.12);box-shadow:0 12px 32px rgba(13,32,24,.32)}}
 .tour-avatar{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;background:#fff;border:4px solid var(--g);box-shadow:0 12px 28px rgba(13,32,24,.28);display:flex;align-items:center;justify-content:center;z-index:6}
 .tour-avatar span{width:36px;height:36px;border-radius:50%;background:var(--g);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
@@ -667,6 +669,7 @@ textarea.fi{resize:vertical;min-height:84px;line-height:1.65}
 @keyframes tourFlightStepBack{0%{left:166px;top:84px;transform:rotate(140deg) scale(.78);opacity:0}8%{opacity:1}16%{left:144px;top:55px;transform:rotate(135deg) scale(.9)}32%{left:116px;top:28px;transform:rotate(120deg) scale(1)}48%{left:84px;top:15px;transform:rotate(180deg) scale(1.05)}64%{left:52px;top:27px;transform:rotate(205deg) scale(1)}80%{left:24px;top:54px;transform:rotate(225deg) scale(.95)}92%{opacity:1}100%{left:0;top:84px;transform:rotate(235deg) scale(.78);opacity:0}}
 @keyframes tourPinDrop{0%{opacity:0;transform:translate(-50%,-128%) scale(.72)}70%{opacity:1;transform:translate(-50%,-94%) scale(1.08)}100%{opacity:1;transform:translate(-50%,-100%) scale(1)}}
 @keyframes tourRouteSpark{0%,30%{opacity:0}36%,92%{opacity:1}100%{opacity:0}}
+@keyframes tourTooltipPulse{0%,100%{opacity:.92;transform:translate(-8px,-100%) translateY(0)}50%{opacity:1;transform:translate(-8px,-100%) translateY(-5px)}}
 @keyframes tourRouteDot{0%{left:0;opacity:0;transform:translate(-50%,-50%) scale(.72)}18%{opacity:1}82%{opacity:1}100%{left:100%;opacity:0;transform:translate(-50%,-50%) scale(.9)}}
 @keyframes tourRouteDotBack{0%{left:100%;opacity:0;transform:translate(-50%,-50%) scale(.72)}18%{opacity:1}82%{opacity:1}100%{left:0;opacity:0;transform:translate(-50%,-50%) scale(.9)}}
 @keyframes tourAvatarTravel{0%{transform:translate(-50%,-50%) scale(.86);filter:saturate(.9)}45%{transform:translate(-50%,-58%) scale(1.12);filter:saturate(1.12)}100%{transform:translate(-50%,-50%) scale(1);filter:saturate(1)}}

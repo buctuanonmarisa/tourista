@@ -72,6 +72,18 @@ const stripToJson = (value: string) => {
 const toDigits = (value: unknown) => String(value || '0').replace(/[^\d]/g, '')
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const TRANSCRIPT_PROMPT_LIMIT = 12000
+const DEFAULT_FETCH_TIMEOUT_MS = 12000
+const CAPTION_FETCH_TIMEOUT_MS = 9000
+
+const fetchWithTimeout = async (url: string, init: RequestInit = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 const htmlDecode = (value: string) =>
   value
@@ -124,7 +136,7 @@ const fetchCaptionTranscript = async (track: CaptionTrack) => {
   const transcriptUrl = new URL(track.baseUrl)
   transcriptUrl.searchParams.set('fmt', 'json3')
 
-  const jsonResponse = await fetch(transcriptUrl.toString())
+  const jsonResponse = await fetchWithTimeout(transcriptUrl.toString(), {}, CAPTION_FETCH_TIMEOUT_MS)
   if (jsonResponse.ok) {
     const data = await jsonResponse.json().catch(() => null)
     const transcript = parseJson3Transcript(data)
@@ -132,7 +144,7 @@ const fetchCaptionTranscript = async (track: CaptionTrack) => {
   }
 
   const xmlUrl = new URL(track.baseUrl)
-  const xmlResponse = await fetch(xmlUrl.toString())
+  const xmlResponse = await fetchWithTimeout(xmlUrl.toString(), {}, CAPTION_FETCH_TIMEOUT_MS)
   if (!xmlResponse.ok) return ''
 
   return parseXmlTranscript(await xmlResponse.text())
@@ -181,19 +193,20 @@ const extractJsonObject = (source: string, marker: string) => {
 
 // Extract video ID from YouTube URL
 function extractVideoId(url: string): string | null {
+  const cleanedUrl = url.trim()
   try {
-    const parsed = new URL(url)
+    const parsed = new URL(cleanedUrl)
     const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
     if (host === 'youtu.be') return parsed.pathname.split('/').filter(Boolean)[0] || null
-    if (host.endsWith('youtube.com')) {
+    if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
       if (parsed.pathname === '/watch') return parsed.searchParams.get('v')
       const parts = parsed.pathname.split('/').filter(Boolean)
       if (['embed', 'shorts', 'live'].includes(parts[0])) return parts[1] || null
     }
-    const loose = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{6,})/)
+    const loose = cleanedUrl.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{6,})/)
     return loose?.[1] || null
   } catch {
-    const loose = url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{6,})/)
+    const loose = cleanedUrl.match(/(?:v=|youtu\.be\/|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{6,})/)
     return loose?.[1] || null
   }
 }
@@ -238,7 +251,7 @@ const dayCostOrAssumption = (day: GeneratedItineraryDay, country: string, index:
 async function fetchYouTubeMetadata(videoId: string) {
   const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
 
-  const response = await fetch(oembedUrl)
+  const response = await fetchWithTimeout(oembedUrl)
   if (!response.ok) {
     throw new Error('Failed to fetch YouTube metadata')
   }
@@ -252,12 +265,12 @@ async function fetchYouTubeMetadata(videoId: string) {
   }
 
   try {
-    const watchResponse = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    const watchResponse = await fetchWithTimeout(`https://www.youtube.com/watch?v=${videoId}`, {
       headers: {
         'Accept-Language': 'en-US,en;q=0.9',
-        'User-Agent': 'Mozilla/5.0 TouristaMetadataBot/1.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) TouristaMetadataBot/1.0',
       },
-    })
+    }, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (watchResponse.ok) {
       const html = await watchResponse.text()
@@ -444,15 +457,23 @@ const conciseDetail = (value: unknown, fallbackEmoji: string) => {
   return `${words.slice(0, 28).join(' ').replace(/[,.!?;:]*$/, '')}.`
 }
 
-const countriesFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) => {
-  const metadataText = [
+const metadataSearchText = (metadata: Partial<Pick<YouTubeMetadata, 'title' | 'description' | 'keywords' | 'transcript'>>) =>
+  [
     metadata.title,
     metadata.keywords?.join(' '),
     metadata.description,
+    metadata.transcript?.slice(0, 6000),
   ].filter(Boolean).join(' ').toLowerCase()
+
+const countriesFromMetadata = (metadata: Partial<Pick<YouTubeMetadata, 'title' | 'description' | 'keywords' | 'transcript'>>) => {
+  const metadataText = metadataSearchText(metadata)
 
   if (metadataText.includes('galapagos') || metadataText.includes('galápagos')) {
     return ['Ecuador']
+  }
+
+  if (metadataText.includes('bohol') || metadataText.includes('panglao') || metadataText.includes('chocolate hills')) {
+    return ['Philippines']
   }
 
   const findCountries = (source: string) =>
@@ -467,10 +488,10 @@ const countriesFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'descri
   return Array.from(new Set(matches.length ? matches : ['Philippines']))
 }
 
-const countryFromMetadata = (metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) =>
+const countryFromMetadata = (metadata: Partial<Pick<YouTubeMetadata, 'title' | 'description' | 'keywords' | 'transcript'>>) =>
   countriesFromMetadata(metadata)[0] || 'Philippines'
 
-const normalizeCountries = (value: unknown, metadata: Pick<YouTubeMetadata, 'title' | 'description' | 'keywords'>) => {
+const normalizeCountries = (value: unknown, metadata: Partial<Pick<YouTubeMetadata, 'title' | 'description' | 'keywords' | 'transcript'>>) => {
   const requested = splitPlaces(value)
   const matched = requested
     .map(country => FALLBACK_COUNTRIES.find(option => option.toLowerCase() === country.toLowerCase()) || country)
@@ -481,7 +502,7 @@ const normalizeCountries = (value: unknown, metadata: Pick<YouTubeMetadata, 'tit
 
 const cityOptionsForCountry: Record<string, string[]> = {
   'South Africa': ['Cape Town', 'Kruger National Park', 'Garden Route'],
-  Philippines: ['Manila', 'Cebu', 'Palawan'],
+  Philippines: ['Bohol', 'Panglao', 'Balicasag Island', 'Chocolate Hills', 'Loboc River', 'Cebu', 'Palawan'],
   Japan: ['Tokyo', 'Kyoto', 'Osaka'],
   Thailand: ['Bangkok', 'Chiang Mai', 'Phuket'],
   Indonesia: ['Bali', 'Ubud', 'Jakarta'],
@@ -493,11 +514,26 @@ const cityOptionsForCountry: Record<string, string[]> = {
   Ecuador: ['Galapagos Islands', 'Santa Cruz Island', 'Isabela Island', 'San Cristobal Island', 'Quito'],
 }
 
+const placesFromMetadata = (metadata: YouTubeMetadata, countries: string[]) => {
+  const text = metadataSearchText(metadata)
+  const knownPlaces = Array.from(new Set(countries.flatMap(countryName => cityOptionsForCountry[countryName] || [countryName])))
+  const mentioned = knownPlaces.filter(place => text.includes(place.toLowerCase()))
+
+  if (text.includes('bohol')) mentioned.unshift('Bohol')
+  if (text.includes('panglao')) mentioned.push('Panglao')
+  if (text.includes('balicasag')) mentioned.push('Balicasag Island')
+  if (text.includes('chocolate hills')) mentioned.push('Chocolate Hills')
+  if (text.includes('loboc')) mentioned.push('Loboc River')
+  if (text.includes('alona')) mentioned.push('Alona Beach')
+
+  return Array.from(new Set(mentioned.length ? mentioned : knownPlaces)).slice(0, 9)
+}
+
 function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
   const countries = countriesFromMetadata(metadata)
   const country = countries.join(', ')
   const primaryCountry = countries[0] || 'Philippines'
-  const cities = Array.from(new Set(countries.flatMap(countryName => cityOptionsForCountry[countryName] || [countryName])))
+  const cities = placesFromMetadata(metadata, countries)
   const duration = 3
   const itinerary = Array.from({ length: duration }, (_, index) => {
     const place = cities[index % cities.length]
@@ -542,6 +578,7 @@ function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId:
   const countries = normalizeCountries(aiResponse.country, metadata)
   const country = countries.join(', ')
   const primaryCountry = countries[0] || countryFromMetadata(metadata)
+  const fallbackPlaces = placesFromMetadata(metadata, countries)
 
   const vibes = Array.isArray(aiResponse.travel_vibes)
     ? aiResponse.travel_vibes.filter((v: string) => FALLBACK_VIBES.includes(v)).slice(0, 3)
@@ -562,15 +599,26 @@ function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId:
       cost: dayCostOrAssumption(day, primaryCountry, index),
       media: generateItineraryMedia(),
     }))
+    .map((day, index) => {
+      const place = fallbackPlaces[index % fallbackPlaces.length] || primaryCountry
+      return {
+        ...day,
+        activity: day.activity || `${place} travel highlights`,
+        highlights: day.highlights || conciseDetail(`Explore the most useful ${place} stops shown or implied by this vlog.`, 'âœ¨'),
+        foodTips: day.foodTips || conciseDetail(`Try local food near ${place} and verify exact restaurants from the creator notes.`, 'ðŸœ'),
+        gettingThere: day.gettingThere || conciseDetail(`Cluster nearby ${place} stops and confirm transfers, fares, and travel time before booking.`, 'ðŸš•'),
+        tips: day.tips || conciseDetail('Save offline maps, check weather, and confirm entry fees before locking this day.', 'ðŸ’¡'),
+      }
+    })
 
   const itineraryTotal = itinerary.reduce((sum, day) => sum + (parseInt(day.cost) || 0), 0)
   const estimatedCost = toDigits(aiResponse.estimated_cost_php) || String(itineraryTotal)
 
   return {
     title: (aiResponse.enhanced_title || metadata.title).slice(0, 100),
-    description: aiResponse.description || '',
+    description: aiResponse.description || metadata.description || `A travel vlog by ${metadata.author || 'a YouTube creator'}.`,
     country,
-    cities: aiResponse.cities || '',
+    cities: aiResponse.cities || fallbackPlaces.join(', '),
     vibe: vibeString,
     coverImage: metadata.thumbnailUrl,
     duration,

@@ -506,12 +506,13 @@ export default function Home() {
   }
 
   const handleAIAutoFill = async () => {
-    if (!videoUrl.trim()) {
+    const cleanedVideoUrl = videoUrl.trim()
+    if (!cleanedVideoUrl) {
       setAiAutoFillError('Please enter a YouTube URL first')
       return
     }
 
-    if (!videoUrl.includes('youtube') && !videoUrl.includes('youtu.be')) {
+    if (!/(youtube\.com|youtu\.be|youtube-nocookie\.com)/i.test(cleanedVideoUrl)) {
       setAiAutoFillError('AI auto-fill currently only supports YouTube videos')
       return
     }
@@ -524,7 +525,7 @@ export default function Home() {
       const response = await fetch('/api/vlogs/auto-fill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ youtubeUrl: videoUrl })
+        body: JSON.stringify({ youtubeUrl: cleanedVideoUrl })
       })
 
       if (!response.ok) {

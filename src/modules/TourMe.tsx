@@ -895,6 +895,17 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
                   )
                 })}
               </div>
+              {topDestination && !travelCue && (
+                <div
+                  className="tour-pin-tooltip"
+                  style={{
+                    left: `${Math.min(82, Math.max(18, topDestination.pin.x + 8))}%`,
+                    top: `${Math.min(78, Math.max(18, topDestination.pin.y - 10))}%`,
+                  }}
+                >
+                  Click a pin to start the tour
+                </div>
+              )}
               <div className="tour-plane" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
               </div>
