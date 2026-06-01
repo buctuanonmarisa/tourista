@@ -33,7 +33,7 @@ export function detectVideoSource(url: string): 'youtube' | 'facebook' | 'tiktok
   if (!url) return null
 
   const lower = url.toLowerCase()
-  if (lower.includes('youtube') || lower.includes('youtu.be')) return 'youtube'
+  if (lower.includes('youtube') || lower.includes('youtu.be') || lower.includes('youtube-nocookie.com')) return 'youtube'
   if (lower.includes('facebook') || lower.includes('fb.com')) return 'facebook'
   if (lower.includes('tiktok')) return 'tiktok'
   if (lower.includes('instagram')) return 'instagram'
@@ -58,6 +58,12 @@ export function getEmbedUrl(url: string): string | null {
       videoId = url.split('v=')[1]?.split('&')[0] || ''
     } else if (url.includes('youtube.com/embed/')) {
       videoId = url.split('embed/')[1]?.split('?')[0] || ''
+    } else if (url.includes('youtube-nocookie.com/embed/')) {
+      videoId = url.split('embed/')[1]?.split('?')[0] || ''
+    } else if (url.includes('youtube.com/shorts/')) {
+      videoId = url.split('shorts/')[1]?.split('?')[0] || ''
+    } else if (url.includes('youtube.com/live/')) {
+      videoId = url.split('live/')[1]?.split('?')[0] || ''
     }
     return videoId ? `https://www.youtube.com/embed/${videoId}` : null
   }

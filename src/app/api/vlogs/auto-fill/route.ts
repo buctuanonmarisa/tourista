@@ -472,9 +472,16 @@ const countriesFromMetadata = (metadata: Partial<Pick<YouTubeMetadata, 'title' |
     return ['Ecuador']
   }
 
-  if (metadataText.includes('bohol') || metadataText.includes('panglao') || metadataText.includes('chocolate hills')) {
+  if (metadataText.includes('bohol') || metadataText.includes('panglao') || metadataText.includes('camotes') || metadataText.includes('cebu') || metadataText.includes('chocolate hills')) {
     return ['Philippines']
   }
+  const inferredCountries: string[] = []
+  if (metadataText.includes('london') || metadataText.includes('united kingdom') || metadataText.includes('uk travel')) inferredCountries.push('United Kingdom')
+  if (metadataText.includes('prague') || metadataText.includes('czech')) inferredCountries.push('Czech Republic')
+  if (metadataText.includes('budapest') || metadataText.includes('hungary')) inferredCountries.push('Hungary')
+  if (metadataText.includes('florence') || metadataText.includes('tuscany')) inferredCountries.push('Italy')
+  if (metadataText.includes('greek islands') || metadataText.includes('santorini') || metadataText.includes('mykonos')) inferredCountries.push('Greece')
+  if (inferredCountries.length) return Array.from(new Set(inferredCountries))
 
   const findCountries = (source: string) =>
     FALLBACK_COUNTRIES.filter(country => source.toLowerCase().includes(country.toLowerCase()))
@@ -483,9 +490,10 @@ const countriesFromMetadata = (metadata: Partial<Pick<YouTubeMetadata, 'title' |
     ...findCountries(metadata.title || ''),
     ...findCountries(metadata.keywords?.join(' ') || ''),
     ...findCountries(metadata.description || ''),
+    ...findCountries(metadata.transcript || ''),
   ]
 
-  return Array.from(new Set(matches.length ? matches : ['Philippines']))
+  return Array.from(new Set(matches.length ? matches : ['Philippines'])).slice(0, 6)
 }
 
 const countryFromMetadata = (metadata: Partial<Pick<YouTubeMetadata, 'title' | 'description' | 'keywords' | 'transcript'>>) =>
@@ -497,12 +505,14 @@ const normalizeCountries = (value: unknown, metadata: Partial<Pick<YouTubeMetada
     .map(country => FALLBACK_COUNTRIES.find(option => option.toLowerCase() === country.toLowerCase()) || country)
     .filter(country => FALLBACK_COUNTRIES.includes(country))
   const fallback = countriesFromMetadata(metadata)
-  return Array.from(new Set(matched.length ? matched : fallback))
+  return Array.from(new Set(matched.length ? matched : fallback)).slice(0, 6)
 }
 
 const cityOptionsForCountry: Record<string, string[]> = {
+  'Czech Republic': ['Prague', 'Old Town Prague', 'Charles Bridge'],
+  Hungary: ['Budapest', 'Buda Castle', 'Danube River'],
   'South Africa': ['Cape Town', 'Kruger National Park', 'Garden Route'],
-  Philippines: ['Bohol', 'Panglao', 'Balicasag Island', 'Chocolate Hills', 'Loboc River', 'Cebu', 'Palawan'],
+  Philippines: ['Bohol', 'Panglao', 'Camotes Island', 'Balicasag Island', 'Chocolate Hills', 'Loboc River', 'Cebu', 'Palawan'],
   Japan: ['Tokyo', 'Kyoto', 'Osaka'],
   Thailand: ['Bangkok', 'Chiang Mai', 'Phuket'],
   Indonesia: ['Bali', 'Ubud', 'Jakarta'],
@@ -521,16 +531,23 @@ const placesFromMetadata = (metadata: YouTubeMetadata, countries: string[]) => {
 
   if (text.includes('bohol')) mentioned.unshift('Bohol')
   if (text.includes('panglao')) mentioned.push('Panglao')
+  if (text.includes('camotes')) mentioned.push('Camotes Island')
+  if (text.includes('cebu')) mentioned.push('Cebu')
   if (text.includes('balicasag')) mentioned.push('Balicasag Island')
   if (text.includes('chocolate hills')) mentioned.push('Chocolate Hills')
   if (text.includes('loboc')) mentioned.push('Loboc River')
   if (text.includes('alona')) mentioned.push('Alona Beach')
+  if (text.includes('london')) mentioned.push('London')
+  if (text.includes('prague')) mentioned.push('Prague')
+  if (text.includes('budapest')) mentioned.push('Budapest')
+  if (text.includes('florence')) mentioned.push('Florence')
+  if (text.includes('santorini')) mentioned.push('Santorini')
 
   return Array.from(new Set(mentioned.length ? mentioned : knownPlaces)).slice(0, 9)
 }
 
 function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
-  const countries = countriesFromMetadata(metadata)
+  const countries = countriesFromMetadata(metadata).slice(0, 6)
   const country = countries.join(', ')
   const primaryCountry = countries[0] || 'Philippines'
   const cities = placesFromMetadata(metadata, countries)
@@ -613,12 +630,13 @@ function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId:
 
   const itineraryTotal = itinerary.reduce((sum, day) => sum + (parseInt(day.cost) || 0), 0)
   const estimatedCost = toDigits(aiResponse.estimated_cost_php) || String(itineraryTotal)
+  const cities = splitPlaces(aiResponse.cities || fallbackPlaces.join(', ')).slice(0, 8).join(', ')
 
   return {
     title: (aiResponse.enhanced_title || metadata.title).slice(0, 100),
     description: aiResponse.description || metadata.description || `A travel vlog by ${metadata.author || 'a YouTube creator'}.`,
     country,
-    cities: aiResponse.cities || fallbackPlaces.join(', '),
+    cities,
     vibe: vibeString,
     coverImage: metadata.thumbnailUrl,
     duration,
