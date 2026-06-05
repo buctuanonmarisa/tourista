@@ -17,13 +17,19 @@ or:
 docker compose up --build
 ```
 
-The app requires `DATABASE_URL` at runtime. Seed only when you want:
+The app requires `DATABASE_URL` at runtime. AI auto-fill uses `OPENAI_API_KEY` first and falls back to `GEMINI_API_KEY` when available.
 
 In `.env`, keep the value unquoted for Docker:
 
 ```bash
 DATABASE_URL=postgresql://user:password@host:5432/tourista
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-5.5
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
 ```
+
+Seed only when you want:
 
 ```bash
 npm run db:seed

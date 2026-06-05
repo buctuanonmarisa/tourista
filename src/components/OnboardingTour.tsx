@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { hasTourCompleted, markTourCompleted } from '@/utils/tourHelpers'
 
 interface TourStep {
@@ -23,14 +23,6 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'step-2',
-    target: '[data-tour="dark-mode"]',
-    kicker: 'Set the mood',
-    title: 'Switch dark mode any time',
-    content: 'Use this toggle whenever you want a darker, softer interface for browsing maps, clips, dashboards, and creator tools.',
-    position: 'bottom',
-  },
-  {
-    id: 'step-3',
     target: '[data-tour="video-card"]',
     kicker: 'Open the story',
     title: 'Click a video card',
@@ -38,7 +30,7 @@ const TOUR_STEPS: TourStep[] = [
     position: 'right',
   },
   {
-    id: 'step-4',
+    id: 'step-3',
     target: '[data-tour="tourme"]',
     kicker: 'Personal guide',
     title: 'Try TourMe',
@@ -46,7 +38,7 @@ const TOUR_STEPS: TourStep[] = [
     position: 'bottom',
   },
   {
-    id: 'step-5',
+    id: 'step-4',
     target: '[data-tour="post-vlog"]',
     kicker: 'Creator mode',
     title: 'Create a vlog with AI',
@@ -54,11 +46,19 @@ const TOUR_STEPS: TourStep[] = [
     position: 'left',
   },
   {
-    id: 'step-6',
+    id: 'step-5',
     target: '[data-tour="dashboard"]',
     kicker: 'See performance',
     title: 'Dashboard and earnings',
     content: 'Track views, likes, unlocks, and estimated earnings, then manage your published vlogs from one focused workspace.',
+    position: 'bottom',
+  },
+  {
+    id: 'step-6',
+    target: '[data-tour="dark-mode"]',
+    kicker: 'Set the mood',
+    title: 'Switch dark mode any time',
+    content: 'Use this toggle whenever you want a darker, softer interface for browsing maps, clips, dashboards, and creator tools.',
     position: 'bottom',
   },
 ]
@@ -67,6 +67,7 @@ export default function OnboardingTour() {
   const [currentStep, setCurrentStep] = useState(0)
   const [isActive, setIsActive] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
+  const tooltipRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!hasTourCompleted()) {
@@ -88,8 +89,9 @@ export default function OnboardingTour() {
 
     const updatePosition = () => {
       const rect = element.getBoundingClientRect()
-      const tooltipWidth = 360
-      const tooltipHeight = 230
+      const tooltipRect = tooltipRef.current?.getBoundingClientRect()
+      const tooltipWidth = tooltipRect?.width || Math.min(360, window.innerWidth - 32)
+      const tooltipHeight = tooltipRect?.height || 260
 
       let top = 0
       let left = 0
@@ -121,12 +123,19 @@ export default function OnboardingTour() {
 
     updatePosition()
     element.classList.add('tour-highlight')
+    const resizeObserver = tooltipRef.current && 'ResizeObserver' in window
+      ? new ResizeObserver(updatePosition)
+      : null
+    if (tooltipRef.current && resizeObserver) {
+      resizeObserver.observe(tooltipRef.current)
+    }
 
     window.addEventListener('scroll', updatePosition, true)
     window.addEventListener('resize', updatePosition)
 
     return () => {
       element.classList.remove('tour-highlight')
+      resizeObserver?.disconnect()
       window.removeEventListener('scroll', updatePosition, true)
       window.removeEventListener('resize', updatePosition)
     }
@@ -161,12 +170,13 @@ export default function OnboardingTour() {
       <div className="tour-overlay" onClick={completeTour} />
 
       <div
+        ref={tooltipRef}
         className="tour-tooltip"
         style={{
           position: 'fixed',
           top: `${position.top}px`,
           left: `${position.left}px`,
-          zIndex: 10001,
+          zIndex: 10020,
         }}
       >
         <div className="tour-step-pill">Step {currentStep + 1} of {TOUR_STEPS.length}</div>

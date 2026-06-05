@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/current-user'
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
-  const user = await prisma.user.findFirst()
+  const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'No user' }, { status: 401 })
 
   const existing = await prisma.unlock.findUnique({

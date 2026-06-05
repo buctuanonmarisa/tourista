@@ -26,9 +26,6 @@ export default function Header() {
           <a href="/dashboard" className="text-gray-700 hover:text-orange-600 font-medium transition-colors">
             Dashboard
           </a>
-          <a href="/profile" className="text-gray-700 hover:text-orange-600 font-medium transition-colors">
-            Profile
-          </a>
         </nav>
 
         {/* CTA Buttons */}
@@ -53,9 +50,6 @@ export default function Header() {
           </a>
           <a href="/dashboard" className="block text-gray-700 hover:text-orange-600 font-medium py-2">
             Dashboard
-          </a>
-          <a href="/profile" className="block text-gray-700 hover:text-orange-600 font-medium py-2">
-            Profile
           </a>
           <button className="w-full px-6 py-2 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold hover:shadow-lg transition-all">
             Post Vlog

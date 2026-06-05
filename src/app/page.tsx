@@ -5,6 +5,8 @@ import EmojiPicker from 'emoji-picker-react'
 import { DEFAULT_COUNTRY, FALLBACK_BUDGETS, FALLBACK_COUNTRIES, FALLBACK_VIBES } from '@/lib/travel-options'
 import TourMe from '@/modules/TourMe'
 import OnboardingTour from '@/components/OnboardingTour'
+import ItineraryTourModal from '@/components/ItineraryTourModal'
+import MediaPreview, { clipPreviewUrl, directVideoUrl, getEmbedUrl, withAutoplay } from '@/components/MediaPreview'
 
 /* ─── Types ──────────────────────────────────────────── */
 interface VlogAuthor {
@@ -247,6 +249,10 @@ export default function Home() {
     avatarImage: '', coverImage: '',
     isAdmin: false,
   })
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('register')
+  const [authForm, setAuthForm] = useState({ name: '', handle: '' })
+  const [authError, setAuthError] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
 
   /* ─── Notifications ─── */
   const [nCnt, setNCnt] = useState(4)
@@ -259,6 +265,8 @@ export default function Home() {
   const [editingVlogId, setEditingVlogId] = useState<string | null>(null)
   const [autoplayVlogId, setAutoplayVlogId] = useState<string | null>(null)
   const [tourMeOpen, setTourMeOpen] = useState(false)
+  const [itineraryTourVlog, setItineraryTourVlog] = useState<VlogDetail | null>(null)
+  const [itineraryTourDayIndex, setItineraryTourDayIndex] = useState(0)
   const [dashboardMonthIndex, setDashboardMonthIndex] = useState<number | null>(11)
 
   /* ─── Refs for file inputs ─── */
@@ -291,21 +299,29 @@ export default function Home() {
     } catch { /* ignore */ }
   }, [])
 
+  const hydrateProfile = useCallback((d: UserProfile) => {
+    setProfile(d)
+    setPForm({
+      name: d.name || '', tagline: d.tagline || '', bio: d.bio || '',
+      country: d.country || DEFAULT_COUNTRY, travelStyle: d.travelStyle || 'Budget',
+      youtubeUrl: d.youtubeUrl || '', instagramUrl: d.instagramUrl || '', tiktokUrl: d.tiktokUrl || '',
+      avatarImage: d.avatarImage || '', coverImage: d.coverImage || '',
+      isAdmin: Boolean(d.isAdmin),
+    })
+  }, [])
+
   const fetchProfile = useCallback(async () => {
     try {
       const r = await fetch('/api/profile')
+      if (r.status === 401) {
+        setProfile(null)
+        return
+      }
       if (!r.ok) return
       const d: UserProfile = await r.json()
-      setProfile(d)
-      setPForm({
-        name: d.name || '', tagline: d.tagline || '', bio: d.bio || '',
-        country: d.country || DEFAULT_COUNTRY, travelStyle: d.travelStyle || 'Budget',
-        youtubeUrl: d.youtubeUrl || '', instagramUrl: d.instagramUrl || '', tiktokUrl: d.tiktokUrl || '',
-        avatarImage: d.avatarImage || '', coverImage: d.coverImage || '',
-        isAdmin: Boolean(d.isAdmin),
-      })
+      hydrateProfile(d)
     } catch { /* ignore */ }
-  }, [])
+  }, [hydrateProfile])
 
   const fetchTravelOptions = useCallback(async () => {
     try {
@@ -384,10 +400,26 @@ export default function Home() {
     setAutoplayVlogId(null)
     setTourMeOpen(true)
   }
-  const go = (p: string) => {
+  const openItineraryTour = (detail: VlogDetail) => {
+    stopPageVideos()
+    setTourMeOpen(false)
+    setItineraryTourDayIndex(0)
+    setItineraryTourVlog(detail)
+  }
+  const requireProfile = (nextPage: string) => {
+    if (profile) return true
     setPrev(page)
-    if (p === 'browse' || p === 'dashboard') closeVlogPanels()
-    setPage(p)
+    setAuthMode('register')
+    setAuthError('')
+    setPage('auth')
+    return false
+  }
+  const go = (p: string) => {
+    const nextPage = p === 'profile' ? 'dashboard' : p
+    if (['dashboard', 'edit', 'post', 'notif'].includes(nextPage) && !requireProfile(nextPage)) return
+    setPrev(page)
+    if (nextPage === 'browse' || nextPage === 'dashboard') closeVlogPanels()
+    setPage(nextPage)
   }
   const submitSearch = () => {
     closeVlogPanels()
@@ -464,37 +496,15 @@ export default function Home() {
   /* ══════════════════════════════════════════
      Video embed
   ══════════════════════════════════════════ */
-  const getEmbedUrl = (url: string) => {
-    const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\s?]+)/)
-    if (yt) return `https://www.youtube.com/embed/${yt[1]}?controls=1&rel=0`
-    const ytShort = url.match(/youtube\.com\/shorts\/([^&\s?]+)/)
-    if (ytShort) return `https://www.youtube.com/embed/${ytShort[1]}?controls=1&rel=0`
-    const ytSearch = url.match(/youtube\.com\/results\?search_query=([^&]+)/)
-    if (ytSearch) return `https://www.youtube.com/embed?listType=search&list=${ytSearch[1]}&controls=1&rel=0`
-    return null
-  }
-  const withAutoplay = (url: string, muted = true) =>
-    `${url}${url.includes('?') ? '&' : '?'}autoplay=1&mute=${muted ? '1' : '0'}&playsinline=1`
-  const withManualPlayback = (url: string) =>
-    `${url}${url.includes('?') ? '&' : '?'}autoplay=0&mute=0&playsinline=1`
   const getFeedEmbedUrl = (v: VlogCard) => {
     const base = v.youtubeUrl ? getEmbedUrl(v.youtubeUrl) : null
     return base ? withAutoplay(base, true) : null
   }
-  const getVlogEmbedUrl = (url?: string | null) => {
+  const getVlogEmbedUrl = (url?: string | null, muted = false) => {
     if (!url) return null
     const base = getEmbedUrl(url)
-    return base ? withAutoplay(base, false) : null
+    return base ? withAutoplay(base, muted) : null
   }
-  const directVideoUrl = (url: string) =>
-    url.startsWith('blob:') ||
-    url.startsWith('/api/uploads/') ||
-    /\.(mp4|webm|ogg)(\?|#|$)/i.test(url)
-  const clipPreviewUrl = (url: string) => {
-    const embed = getEmbedUrl(url)
-    return embed ? withManualPlayback(embed) : null
-  }
-
   const detectVideo = (url: string) => {
     setVideoUrl(url)
     if (!url) { setVideoDetected(''); return }
@@ -608,6 +618,10 @@ export default function Home() {
 
   const doUnlock = async () => {
     if (!vlog) return
+    if (!profile) {
+      go('auth')
+      return
+    }
     setProcessingLabel('Unlocking itinerary...')
     try {
       await fetch(`/api/vlogs/${vlog.id}/unlock`, { method: 'POST' })
@@ -932,33 +946,18 @@ export default function Home() {
     setMediaModal({ title, items, index: Math.min(Math.max(index, 0), items.length - 1) })
   }
 
-  const renderMediaPreview = (item: MediaItem, title: string) => {
-    if (item.type !== 'video') {
-      return (
-        <img
-          src={item.url}
-          alt={title}
-          onError={event => {
-            const img = event.currentTarget
-            if (!img.src.includes('/api/generated-travel-image')) {
-              img.src = generatedTravelImageUrl(title, postForm.cities || postForm.title, postForm.country)
-            }
-          }}
-        />
-      )
-    }
-    const previewUrl = clipPreviewUrl(item.url)
-    if (previewUrl) {
-      return <iframe src={previewUrl} title={title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
-    }
-    if (directVideoUrl(item.url)) {
-      return <video src={item.url} preload="metadata" playsInline controls />
-    }
+  const renderMediaPreview = (item: MediaItem, title: string, autoplay = false) => {
     return (
-      <div className="clip-link-preview">
-        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <span>Preview link</span>
-      </div>
+      <MediaPreview
+        item={item}
+        title={title}
+        autoplay={autoplay}
+        onImageFallback={img => {
+          if (!img.src.includes('/api/generated-travel-image')) {
+            img.src = generatedTravelImageUrl(title, postForm.cities || postForm.title, postForm.country)
+          }
+        }}
+      />
     )
   }
 
@@ -1043,6 +1042,10 @@ export default function Home() {
   }
 
   const publishVlog = async () => {
+    if (!profile) {
+      go('auth')
+      return
+    }
     setPublishing(true); setPublishError('')
     try {
       const isYt = videoUrl.includes('youtube') || videoUrl.includes('youtu.be')
@@ -1207,7 +1210,45 @@ export default function Home() {
   /* ══════════════════════════════════════════
      Profile edit
   ══════════════════════════════════════════ */
+  const submitAuth = async () => {
+    setAuthLoading(true)
+    setAuthError('')
+    try {
+      const response = await fetch(`/api/auth/${authMode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authForm),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.user) {
+        setAuthError(result.error || 'Could not continue. Please try again.')
+        return
+      }
+      hydrateProfile(result.user)
+      await fetchMyVlogs()
+      const nextPage = prev && prev !== 'auth' ? prev : 'dashboard'
+      if (nextPage === 'browse' || nextPage === 'dashboard') closeVlogPanels()
+      setPrev('auth')
+      setPage(nextPage)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+    setProfile(null)
+    setMyVlogs([])
+    setSelectedMyVlogId(null)
+    setDashboardMode('list')
+    go('browse')
+  }
+
   const saveProfile = async () => {
+    if (!profile) {
+      go('auth')
+      return
+    }
     setProcessingLabel('Saving profile...')
     try {
       const response = await fetch('/api/profile', {
@@ -1482,7 +1523,6 @@ export default function Home() {
   const stepLbl = (n: number) => n === postStep ? 'sl2 ac' : 'sl2'
   const stepLine = (n: number) => n < postStep ? 'sln dn' : 'sln'
   const activeModalItem = mediaModal ? mediaModal.items[mediaModal.index] : null
-
   /* ══════════════════════════════════════════
      RENDER
   ══════════════════════════════════════════ */
@@ -1576,6 +1616,22 @@ export default function Home() {
               <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span className="tn-btn-label">Post vlog</span>
             </button>
+            {profile ? (
+              <>
+                <button type="button" className={`tn-avatar${page === 'dashboard' ? ' on' : ''}`} onClick={() => go('dashboard')} aria-label="Dashboard profile">
+                  {profile.avatarImage ? <img src={profile.avatarImage} alt={profile.name || 'Dashboard profile'} /> : profile.initials || 'ME'}
+                </button>
+                <button type="button" className="tn-btn" onClick={logout} aria-label="Log out">
+                  <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  <span className="tn-btn-label">Log out</span>
+                </button>
+              </>
+            ) : (
+              <button type="button" className="tn-btn tn-auth" onClick={() => { setAuthMode('register'); setAuthError(''); go('auth') }} aria-label="Login or register">
+                <svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+                <span className="tn-btn-label">Login</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1588,6 +1644,19 @@ export default function Home() {
         vlogs={vlogs}
         profileInitials={profile?.initials || 'ME'}
       />
+      {itineraryTourVlog && (
+        <ItineraryTourModal
+          detail={itineraryTourVlog}
+          activeDayIndex={itineraryTourDayIndex}
+          unlocked={unlocked}
+          onClose={() => setItineraryTourVlog(null)}
+          onUnlock={doUnlock}
+          onActiveDayIndexChange={setItineraryTourDayIndex}
+          mediaForDay={mediaForDay}
+          openMediaModal={openMediaModal}
+          renderMediaPreview={renderMediaPreview}
+        />
+      )}
       {/* ── FILTER BAR ───────────────────────────────── */}
       {page === 'browse' && (
         <div className="filterbar">
@@ -1830,26 +1899,33 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Itinerary with Short Clips */}
+                  {/* Itinerary with media */}
                   {vlog.itinerary.length > 0 && (() => {
-                    // Collect all video clips from unlocked days
-                    const allClips = vlog.itinerary
-                      .filter(day => !day.locked || unlocked)
-                      .flatMap(day => {
-                        const dayMedia = mediaForDay(day)
-                        return dayMedia
-                          .filter(item => item.type === 'video')
-                          .map(item => ({ ...item, dayNumber: day.day, activity: day.activity }))
-                      })
+                    const allDayMedia: Array<MediaItem & { dayNumber: number; activity: string }> = []
+                    const activeMedia: MediaItem & { dayNumber: number; activity: string } = { url: '', type: 'image', dayNumber: 0, activity: '' }
+                    const activeMediaIndex = 0
+                    const shiftDetailMedia = (_delta: number) => undefined
 
                     return (
                       <>
-                        <div className="gi-panel-section-title">Day-by-day itinerary</div>
+                        <div className="itinerary-section-head">
+                          <div className="gi-panel-section-title">Day-by-day itinerary</div>
+                          <button type="button" className="itinerary-tour-btn" onClick={() => openItineraryTour(vlog)}>
+                            <svg viewBox="0 0 24 24"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
+                            Tour me
+                          </button>
+                        </div>
                         <div className="itinerary-with-clips">
                           {/* Left side: Itinerary */}
                           <div className="itinerary-list">
                             {vlog.itinerary.map(day => (
                               <div key={day.id} className="gi-itinerary-card" style={{ opacity: day.locked && !unlocked ? 0.55 : 1 }}>
+                                <div className="gi-itinerary-route-marker" aria-hidden="true">
+                                  <svg viewBox="0 0 24 24">
+                                    <path d="M8.5 6.4c1.4-.9 3.1-.2 3.8 1.2.8 1.6.4 3.7-.8 5.4-1 1.4-2.7 3-4 2.4-1.4-.6-1.8-3.2-1.6-5 .2-1.8 1.1-3.1 2.6-4Z"/>
+                                    <path d="M15.7 10.7c1.2-.8 2.8-.2 3.4 1.1.7 1.5.3 3.3-.8 4.8-.9 1.3-2.4 2.6-3.6 2.1-1.2-.5-1.6-2.8-1.4-4.4.2-1.6 1-2.8 2.4-3.6Z"/>
+                                  </svg>
+                                </div>
                                 <div className="gi-itinerary-head">
                                   <div className="gi-itinerary-day" style={{ color: day.locked && !unlocked ? 'var(--color-text-secondary)' : 'var(--g)' }}>
                                     Day {day.day}
@@ -1874,44 +1950,42 @@ export default function Home() {
                             ))}
                           </div>
 
-                          {/* Right side: Short Clips */}
-                          {allClips.length > 0 && (
+                          {false && (
                             <div className="clips-sidebar">
                               <div className="clips-sidebar-header">
                                 <svg viewBox="0 0 24 24" width="16" height="16" style={{ stroke:'currentColor', fill:'none', strokeWidth:2 }}>
                                   <polygon points="5 3 19 12 5 21 5 3"/>
                                 </svg>
-                                <span>Short clips ({allClips.length})</span>
+                                <span>Itinerary media ({allDayMedia.length})</span>
                               </div>
-                              <div className="clips-feed">
-                                {allClips.map((clip, index) => {
-                                  const previewUrl = clipPreviewUrl(clip.url)
-                                  return (
-                                    <div key={`${clip.url}-${index}`} className="clip-item">
-                                      <div className="clip-video">
-                                        {previewUrl ? (
-                                          <iframe
-                                            src={previewUrl}
-                                            title={`Day ${clip.dayNumber} clip`}
-                                            allow="autoplay; encrypted-media; picture-in-picture"
-                                            allowFullScreen
-                                          />
-                                        ) : directVideoUrl(clip.url) ? (
-                                          <video src={clip.url} preload="metadata" playsInline controls />
-                                        ) : (
-                                          <div className="clip-link-preview">
-                                            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                            <span>View clip</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="clip-info">
-                                        <div className="clip-day">Day {clip.dayNumber}</div>
-                                        <div className="clip-activity">{clip.activity}</div>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
+                              <div className="clip-carousel">
+                                {allDayMedia.length > 1 && (
+                                  <button type="button" className="clip-carousel-nav prev" aria-label="Previous media" onClick={() => shiftDetailMedia(-1)}>
+                                    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                                  </button>
+                                )}
+                                <div
+                                  className="clip-item clip-item-featured"
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => openMediaModal(`Day ${activeMedia.dayNumber} photos & videos`, allDayMedia, activeMediaIndex)}
+                                  onKeyDown={event => {
+                                    if (event.key === 'Enter' || event.key === ' ') openMediaModal(`Day ${activeMedia.dayNumber} photos & videos`, allDayMedia, activeMediaIndex)
+                                  }}
+                                >
+                                  <div className="clip-video">
+                                    {renderMediaPreview(activeMedia, `Day ${activeMedia.dayNumber} ${activeMedia.type}`, true)}
+                                  </div>
+                                  <div className="clip-info">
+                                    <div className="clip-day">Day {activeMedia.dayNumber} · {activeMedia.type === 'video' ? 'Clip' : 'Photo'} {activeMediaIndex + 1} of {allDayMedia.length}</div>
+                                    <div className="clip-activity">{activeMedia.activity}</div>
+                                  </div>
+                                </div>
+                                {allDayMedia.length > 1 && (
+                                  <button type="button" className="clip-carousel-nav next" aria-label="Next media" onClick={() => shiftDetailMedia(1)}>
+                                    <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           )}
@@ -2097,7 +2171,13 @@ export default function Home() {
                 {/* Itinerary */}
                 {vlog.itinerary.length > 0 && (
                   <>
-                    <div className="slbl" style={{ marginBottom:'12px' }}>Day-by-day itinerary</div>
+                    <div className="itinerary-section-head detail">
+                      <div className="slbl">Day-by-day itinerary</div>
+                      <button type="button" className="itinerary-tour-btn" onClick={() => openItineraryTour(vlog)}>
+                        <svg viewBox="0 0 24 24"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
+                        Tour me
+                      </button>
+                    </div>
                     {vlog.itinerary.map(day => (
                       <div key={day.id} className="id" style={{ opacity: day.locked && !unlocked ? 0.45 : 1 }}>
                         <div className="ir1">
@@ -2187,15 +2267,52 @@ export default function Home() {
       {/* ══════════════════════════════════════
           PROFILE
       ══════════════════════════════════════ */}
-      {page === 'profile' && (
+      {page === 'auth' && (
+        <div className="page on">
+          <div className="auth-page">
+            <div className="auth-card">
+              <div className="auth-brand">Tourista</div>
+              <h1>{authMode === 'register' ? 'Create your traveler profile' : 'Welcome back'}</h1>
+              <p>{authMode === 'register' ? 'Pick a display name and handle. We will keep you signed in for profile edits, posts, and unlocks.' : 'Enter your handle to continue your creator session.'}</p>
+              <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
+                <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => { setAuthMode('register'); setAuthError('') }}>Register</button>
+                <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setAuthError('') }}>Login</button>
+              </div>
+              {authMode === 'register' && (
+                <div className="fg">
+                  <label>Display name</label>
+                  <input className="fi" type="text" value={authForm.name} onChange={e => setAuthForm(f => ({ ...f, name: e.target.value }))} placeholder="Marisa Buctuanon" />
+                </div>
+              )}
+              <div className="fg">
+                <label>Handle</label>
+                <input
+                  className="fi"
+                  type="text"
+                  value={authForm.handle}
+                  onChange={e => setAuthForm(f => ({ ...f, handle: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && !authLoading && submitAuth()}
+                  placeholder="marisaroams"
+                />
+              </div>
+              {authError && <div className="auth-error">{authError}</div>}
+              <button className="nb auth-submit" type="button" onClick={submitAuth} disabled={authLoading}>
+                {authLoading ? 'Continuing...' : authMode === 'register' ? 'Create profile' : 'Login'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {profile ? false && (
         <div className="page on">
           <div className="w" style={{ paddingTop:0 }}>
             <div style={{ border:'1px solid var(--color-border-tertiary)', borderRadius:'14px', overflow:'hidden', marginTop:'20px' }}>
-              <div className="pcv" style={profile?.coverImage ? { backgroundImage: `url('${profile.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background:'linear-gradient(135deg,var(--g1),var(--g))' }}>
+              <div className="pcv" style={profile?.coverImage ? { backgroundImage: `url('${profile?.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : { background:'linear-gradient(135deg,var(--g1),var(--g))' }}>
                 <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px', opacity:.08 }}>🌿</div>
               </div>
               <div className="pbar">
-                <div className="pavw"><div className="pavi">{profile?.avatarImage ? <img src={profile.avatarImage} alt={profile.name || 'Profile'} /> : profile?.initials || 'M'}</div></div>
+                <div className="pavw"><div className="pavi">{profile?.avatarImage ? <img src={profile?.avatarImage || ''} alt={profile?.name || 'Profile'} /> : profile?.initials || 'M'}</div></div>
                 <div style={{ flex:1, paddingBottom:'2px' }}>
                   <div className="pn">{profile?.name || 'MarisolRoams'}</div>
                   <div className="ps">
@@ -2232,7 +2349,7 @@ export default function Home() {
                   </div>
                   <div className="vg" style={{ marginBottom:'0' }}>
                     {vlogs.filter(v => pinnedVlogIds.has(v.id)).map((v) => (
-                      <div key={v.id} className="vgc" style={{ position:'relative', outline:'2px solid var(--g)', outlineOffset:'-2px', borderRadius:'12px' }} onClick={() => openD('profile', v.id)}>
+                      <div key={v.id} className="vgc" style={{ position:'relative', outline:'2px solid var(--g)', outlineOffset:'-2px', borderRadius:'12px' }} onClick={() => openD('dashboard', v.id)}>
                         <div className={`vgth ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
                           <div className="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
                         </div>
@@ -2257,7 +2374,7 @@ export default function Home() {
               </div>
               <div className="vg">
                 {vlogs.slice(0,4).map((v) => (
-                  <div key={v.id} className="vgc" style={{ position:'relative' }} onClick={() => openD('profile', v.id)}>
+                  <div key={v.id} className="vgc" style={{ position:'relative' }} onClick={() => openD('dashboard', v.id)}>
                     <div className={`vgth ${v.thumbnailColor}`} style={v.coverImage ? { backgroundImage: `url('${v.coverImage}')`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
                       <div className="vp"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
                     </div>
@@ -2268,7 +2385,7 @@ export default function Home() {
                     <button onClick={e => { e.stopPropagation(); togglePin(v.id) }}
                       style={{ position:'absolute', top:'6px', right:'6px', background: pinnedVlogIds.has(v.id) ? 'var(--g)' : 'rgba(0,0,0,.32)', border:'none', borderRadius:'6px', width:'22px', height:'22px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', opacity: pinnedVlogIds.has(v.id) ? 1 : 0, transition:'opacity .15s' }}
                       className="pin-btn"
-                      title={pinnedVlogIds.has(v.id) ? 'Unpin' : 'Pin to profile'}>
+                      title={pinnedVlogIds.has(v.id) ? 'Unpin' : 'Pin to dashboard'}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M16 2L12 6 8 2 4 6l4 4-4 8h4l4-4 4 4h4l-4-8 4-4z"/></svg>
                     </button>
                   </div>
@@ -2277,7 +2394,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* ══════════════════════════════════════
           EDIT PROFILE
@@ -3280,6 +3397,75 @@ export default function Home() {
                 <div className="dashboard-vlogs-title" style={{ marginBottom:'11px' }}>
                   <span style={{ fontSize:'14px', fontWeight:600 }}>My vlogs</span>
                 </div>
+                {pinnedVlogIds.size > 0 && (
+                  <div style={{ marginBottom:'18px' }}>
+                    <div style={{ fontSize:'12px', fontWeight:700, color:'var(--g)', letterSpacing:'.04em', marginBottom:'8px', display:'flex', alignItems:'center', gap:'5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--g)" stroke="none"><path d="M16 2L12 6 8 2 4 6l4 4-4 8h4l4-4 4 4h4l-4-8 4-4z"/></svg>
+                      PINNED VLOGS
+                    </div>
+                    <div className="gi-grid dash-vlog-grid">
+                      {myVlogs.filter(v => pinnedVlogIds.has(v.id)).map(v => (
+                        <div
+                          key={`pinned-${v.id}`}
+                          className={`gi-card${selectedMyVlogId === v.id ? ' on' : ''}`}
+                          onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setSelectedMyVlogId(v.id)
+                            setDashboardMode('details')
+                            setVlog(null)
+                            setVlogLoading(true)
+                            try {
+                              const r = await fetch(`/api/vlogs/${v.id}`)
+                              const d: VlogDetail = await r.json()
+                              setVlog(d)
+                              setLikeCount(d.likes)
+                              setLiked(false)
+                              setUnlocked(false)
+                              setReviewText('')
+                            } finally {
+                              setVlogLoading(false)
+                            }
+                          }}
+                          style={{ outline:'2px solid var(--g)', outlineOffset:'-2px', position:'relative' }}
+                        >
+                          <div className={`gi-thumb ${v.thumbnailColor}`}>
+                            <img src={coverForVlog(v)} alt={v.title}/>
+                            <div className="gi-thumb-play">
+                              <div className="gi-thumb-play-btn">
+                                <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                              </div>
+                            </div>
+                            {v.credits > 0 ? <div className="gi-cred-badge">{v.credits} unlocks</div> : <div className="gi-cred-badge free">Free</div>}
+                            <div className="gi-card-gradient" />
+                            <div className="gi-card-copy">
+                              <div className="gi-card-author">
+                                <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
+                                <span>{v.author.handle}</span>
+                              </div>
+                              <div className="gi-card-title">{v.title}</div>
+                              <div className="gi-card-meta">{fmtShortNumber(v.views)} views</div>
+                            </div>
+                            <button
+                              type="button"
+                              className="pin-btn"
+                              onClick={e => { e.stopPropagation(); togglePin(v.id) }}
+                              title="Unpin from dashboard"
+                              style={{ position:'absolute', top:'8px', right:'8px', background:'var(--g)', border:'none', borderRadius:'6px', width:'26px', height:'26px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2 }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M16 2L12 6 8 2 4 6l4 4-4 8h4l4-4 4 4h4l-4-8 4-4z"/></svg>
+                            </button>
+                          </div>
+                          <div className="gi-title">{v.title}</div>
+                          <div className="gi-info">
+                            <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
+                            <div className="gi-info-handle">{v.views >= 1000 ? `${(v.views/1000).toFixed(1)}k` : v.views} views · {v.likes} likes</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="gi-grid dash-vlog-grid">
                   {myVlogs.length === 0 ? (
                     <div className="dash-empty">
@@ -3318,6 +3504,15 @@ export default function Home() {
                         </div>
                         {v.credits > 0 ? <div className="gi-cred-badge">{v.credits} unlocks</div> : <div className="gi-cred-badge free">Free</div>}
                         <div className="gi-card-gradient" />
+                        <button
+                          type="button"
+                          className="pin-btn"
+                          onClick={e => { e.stopPropagation(); togglePin(v.id) }}
+                          title={pinnedVlogIds.has(v.id) ? 'Unpin from dashboard' : 'Pin to dashboard'}
+                          style={{ position:'absolute', top:'8px', right:'8px', background: pinnedVlogIds.has(v.id) ? 'var(--g)' : 'rgba(0,0,0,.42)', border:'none', borderRadius:'6px', width:'26px', height:'26px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', opacity: pinnedVlogIds.has(v.id) ? 1 : 0, transition:'opacity .15s', zIndex:2 }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M16 2L12 6 8 2 4 6l4 4-4 8h4l4-4 4 4h4l-4-8 4-4z"/></svg>
+                        </button>
                         <div className="gi-card-copy">
                           <div className="gi-card-author">
                             <div className={`gi-info-avatar av ${v.author.avatarColor}`}>{v.author.initials}</div>
@@ -3465,7 +3660,13 @@ export default function Home() {
                           {/* Itinerary */}
                           {vlog.itinerary && vlog.itinerary.length > 0 && (
                             <div className="gi-panel-itinerary">
-                              <div className="gi-panel-section-title">Itinerary</div>
+                              <div className="itinerary-section-head">
+                                <div className="gi-panel-section-title">Itinerary</div>
+                                <button type="button" className="itinerary-tour-btn" onClick={() => openItineraryTour(vlog)}>
+                                  <svg viewBox="0 0 24 24"><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
+                                  Tour me
+                                </button>
+                              </div>
                               {vlog.itinerary.map(day => (
                                 <div key={day.id} className="gi-itinerary-card">
                                   <div className="gi-itinerary-head">
@@ -3587,9 +3788,9 @@ export default function Home() {
                 </button>
               )}
               {activeModalItem.type === 'video' && clipPreviewUrl(activeModalItem.url) ? (
-                <iframe src={clipPreviewUrl(activeModalItem.url) || ''} title={mediaModal.title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+                <iframe src={clipPreviewUrl(activeModalItem.url, true) || ''} title={mediaModal.title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
               ) : activeModalItem.type === 'video' && directVideoUrl(activeModalItem.url) ? (
-                <video src={activeModalItem.url} controls preload="metadata" playsInline />
+                <video src={activeModalItem.url} controls preload="auto" playsInline autoPlay muted={false} />
               ) : activeModalItem.type === 'video' ? (
                 <a className="media-modal-link-preview" href={activeModalItem.url} target="_blank" rel="noopener noreferrer">
                   <span>Open short clip</span>

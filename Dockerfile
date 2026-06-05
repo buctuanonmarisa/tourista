@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.6
-
 # Stage 1: Install deps
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -11,9 +9,8 @@ ENV NPM_CONFIG_PROGRESS=false
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies with optimizations
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --ignore-scripts --no-audit --no-fund --prefer-offline --timing --loglevel=notice
+# Install dependencies with retry-friendly npm settings.
+RUN npm ci --ignore-scripts --no-audit --no-fund --prefer-offline --timing --loglevel=notice
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
@@ -69,7 +66,8 @@ COPY --from=deps /app/node_modules/esbuild ./node_modules/esbuild
 COPY --from=builder /app/src/lib/travel-options.ts ./src/lib/travel-options.ts
 
 # Copy entrypoint script
-COPY --chmod=755 entrypoint.sh ./entrypoint.sh
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # Create uploads directory
 RUN mkdir -p ./public/uploads

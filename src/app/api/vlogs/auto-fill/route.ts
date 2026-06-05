@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import OpenAI from 'openai'
 import { detectVideoSource } from '@/utils/vlogHelpers'
 import { FALLBACK_VIBES, FALLBACK_COUNTRIES } from '@/lib/travel-options'
 
 /**
  * AI Auto-Fill API Endpoint
  *
- * Accepts a YouTube URL, extracts metadata, and uses Google Gemini AI
+ * Accepts a YouTube URL, extracts metadata, and uses AI
  * to generate enhanced vlog content across every post-vlog step.
  */
 
@@ -50,7 +51,20 @@ const GEMINI_MODEL_CANDIDATES = [
   'gemini-1.5-flash',
 ].filter(Boolean) as string[]
 
+const OPENAI_MODEL_CANDIDATES = [
+  process.env.OPENAI_MODEL,
+  'gpt-5.5',
+  'gpt-5.4-mini',
+].filter(Boolean) as string[]
+
 const RETRYABLE_GEMINI_STATUSES = new Set([429, 500, 502, 503, 504])
+const RETRYABLE_OPENAI_STATUSES = new Set([408, 409, 429, 500, 502, 503, 504])
+
+const configuredEnv = (value?: string) => {
+  const cleaned = value?.trim()
+  if (!cleaned || cleaned.includes('your_') || cleaned.includes('YOUR_')) return ''
+  return cleaned
+}
 
 const stripToJson = (value: string) => {
   let cleanedText = value.trim()
@@ -320,22 +334,54 @@ function buildMinimalYouTubeMetadata(videoId: string, youtubeUrl: string): YouTu
   }
 }
 
-// Generate enhanced vlog content using Google Gemini AI
-async function generateVlogContent(metadata: YouTubeMetadata) {
-  const apiKey = process.env.GEMINI_API_KEY
+const openAIResponseFormat = {
+  type: 'json_schema',
+  name: 'tourista_vlog_auto_fill',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      enhanced_title: { type: 'string' },
+      description: { type: 'string' },
+      country: { type: 'string' },
+      cities: { type: 'string' },
+      travel_vibes: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+      estimated_cost_php: { type: 'string' },
+      estimated_days: { type: 'string' },
+      itinerary: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            day: { type: 'number' },
+            activity: { type: 'string' },
+            highlights: { type: 'string' },
+            food_tips: { type: 'string' },
+            getting_there: { type: 'string' },
+            tips: { type: 'string' },
+            estimated_cost_php: { type: 'string' },
+          },
+          required: ['day', 'activity', 'highlights', 'food_tips', 'getting_there', 'tips', 'estimated_cost_php'],
+        },
+      },
+    },
+    required: ['enhanced_title', 'description', 'country', 'cities', 'travel_vibes', 'estimated_cost_php', 'estimated_days', 'itinerary'],
+  },
+}
 
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY not configured. Please add it to your .env file.')
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey)
+const buildVlogPrompt = (metadata: YouTubeMetadata) => {
   const vibesList = FALLBACK_VIBES.join(', ')
   const countriesList = FALLBACK_COUNTRIES.join(', ')
   const transcriptExcerpt = metadata.transcript
     ? metadata.transcript.slice(0, TRANSCRIPT_PROMPT_LIMIT)
     : 'Not available'
 
-  const prompt = `You are a travel vlog content specialist. Analyze this YouTube video metadata and transcript, then generate structured travel vlog content.
+  return `You are a travel vlog content specialist. Analyze this YouTube video metadata and transcript, then generate structured travel vlog content.
 
 VIDEO METADATA:
 - Title: ${metadata.title}
@@ -396,6 +442,56 @@ IMPORTANT:
 - Use conversational language with personality (e.g., "Don't miss...", "Pro tip:", "Trust me on this...")
 - Include time-saving tips, money-saving hacks, and local secrets when possible
 - Ensure all fields are present in the response`
+}
+
+async function generateVlogContentWithOpenAI(metadata: YouTubeMetadata) {
+  const apiKey = configuredEnv(process.env.OPENAI_API_KEY)
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY not configured. Please add it to your .env file.')
+  }
+
+  const client = new OpenAI({ apiKey })
+  const prompt = buildVlogPrompt(metadata)
+
+  let lastError: unknown
+  for (const modelName of OPENAI_MODEL_CANDIDATES) {
+    try {
+      const response = await client.responses.create({
+        model: modelName,
+        input: prompt,
+        reasoning: { effort: 'low' },
+        text: { format: openAIResponseFormat as any },
+      })
+
+      return JSON.parse(stripToJson(response.output_text || ''))
+    } catch (error: any) {
+      lastError = error
+      const status = Number(error?.status || error?.response?.status)
+      const message = String(error?.message || '')
+      const canTryNextModel =
+        status === 404 ||
+        RETRYABLE_OPENAI_STATUSES.has(status) ||
+        message.includes('model') ||
+        message.includes('rate limit') ||
+        message.includes('temporarily unavailable')
+      if (!canTryNextModel) break
+    }
+  }
+
+  console.error('OpenAI generation error:', lastError)
+  throw new Error('Failed to generate OpenAI content. Please try again.')
+}
+
+async function generateVlogContentWithGemini(metadata: YouTubeMetadata) {
+  const apiKey = configuredEnv(process.env.GEMINI_API_KEY)
+
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY not configured. Please add it to your .env file.')
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const prompt = buildVlogPrompt(metadata)
 
   let lastError: unknown
   for (const modelName of GEMINI_MODEL_CANDIDATES) {
@@ -420,6 +516,17 @@ IMPORTANT:
 
   console.error('AI generation error:', lastError)
   throw new Error('Failed to generate AI content. Please try again.')
+}
+
+// Generate enhanced vlog content using OpenAI first, then Gemini.
+async function generateVlogContent(metadata: YouTubeMetadata) {
+  try {
+    return await generateVlogContentWithOpenAI(metadata)
+  } catch (openAIError) {
+    console.warn('OpenAI generation unavailable; trying Gemini fallback:', openAIError)
+  }
+
+  return generateVlogContentWithGemini(metadata)
 }
 
 const normalizeItinerary = (aiResponse: any, duration: number): GeneratedItineraryDay[] => {

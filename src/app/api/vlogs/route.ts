@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { DEFAULT_COUNTRY, FALLBACK_COUNTRIES, FALLBACK_VIBES } from '@/lib/travel-options'
+import { getCurrentUser } from '@/lib/current-user'
 
 const stableImageLock = (value: string) =>
   value.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
@@ -189,6 +190,11 @@ export async function GET(req: NextRequest) {
   else if (access === 'unlock') where.credits = { gt: 0 }
 
   if (andFilters.length) where.AND = andFilters
+  if (mine) {
+    const user = await getCurrentUser()
+    if (!user) return NextResponse.json([])
+    where.authorId = user.id
+  }
 
   const vlogs = await prisma.vlog.findMany({
     where,
@@ -227,16 +233,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
-    let author = await prisma.user.findFirst()
+    const author = await getCurrentUser()
     if (!author) {
-      author = await prisma.user.create({
-        data: {
-          handle: 'traveler',
-          name: 'Traveler',
-          initials: 'T',
-          avatarColor: 'ag',
-        },
-      })
+      return NextResponse.json({ error: 'Sign in or register before posting a vlog.' }, { status: 401 })
     }
 
     const stripNonDigit = (s: string) => parseInt(String(s).replace(/[^\d]/g, '') || '0')

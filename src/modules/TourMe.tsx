@@ -1,6 +1,6 @@
 'use client'
 
-import type { CSSProperties } from 'react'
+import type { CSSProperties, MutableRefObject } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface VlogAuthor {
@@ -110,6 +110,14 @@ interface TourMeProps {
   profileInitials?: string
 }
 
+interface GlobeAudioState {
+  context: AudioContext
+  master: GainNode
+  oscillators: OscillatorNode[]
+  lfo: OscillatorNode
+  noiseSource: AudioBufferSourceNode
+}
+
 const normalizeLocationKey = (value: string) =>
   value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
 
@@ -212,119 +220,6 @@ const CURATED_COUNTRY_STOPS: CuratedCountryStop[] = [
   { country: 'South Africa', name: 'Cape Town', lat: -33.891354246580676, lng: 18.42668549225774, streetLat: -33.9258, streetLng: 18.4232, reason: '🏔️🐧 Explore majestic Table Mountain, scenic coastal drives, adorable penguin colonies, and world-famous wine country all in one stunning destination. 🍷' },
 ]
 
-const makeTourAudioDataUrl = () => {
-  const sampleRate = 44100
-  const duration = 10
-  const sampleCount = Math.floor(sampleRate * duration)
-  const buffer = new ArrayBuffer(44 + sampleCount * 2)
-  const view = new DataView(buffer)
-  const writeString = (offset: number, value: string) => {
-    for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i))
-  }
-
-  writeString(0, 'RIFF')
-  view.setUint32(4, 36 + sampleCount * 2, true)
-  writeString(8, 'WAVE')
-  writeString(12, 'fmt ')
-  view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true)
-  view.setUint16(22, 1, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, sampleRate * 2, true)
-  view.setUint16(32, 2, true)
-  view.setUint16(34, 16, true)
-  writeString(36, 'data')
-  view.setUint32(40, sampleCount * 2, true)
-
-  const notes = [
-    { frequency: 146.83, start: 0, end: 9.8, gain: 0.12 },
-    { frequency: 220, start: 0.9, end: 9.4, gain: 0.1 },
-    { frequency: 523.25, start: 3.1, end: 3.32, gain: 0.3 },
-    { frequency: 659.25, start: 3.6, end: 3.82, gain: 0.26 },
-    { frequency: 783.99, start: 4.1, end: 4.32, gain: 0.24 },
-    { frequency: 987.77, start: 4.6, end: 4.82, gain: 0.22 },
-    { frequency: 587.33, start: 5.1, end: 5.32, gain: 0.24 },
-    { frequency: 739.99, start: 5.6, end: 5.82, gain: 0.22 },
-    { frequency: 880, start: 6.1, end: 6.32, gain: 0.22 },
-    { frequency: 1046.5, start: 6.6, end: 6.82, gain: 0.2 },
-    { frequency: 1174.66, start: 7.1, end: 7.32, gain: 0.2 },
-    { frequency: 1318.51, start: 7.6, end: 7.95, gain: 0.24 },
-  ]
-
-  for (let i = 0; i < sampleCount; i += 1) {
-    const time = i / sampleRate
-    const value = notes.reduce((sum, note, index) => {
-      if (time < note.start || time > note.end) return sum
-      const local = (time - note.start) / (note.end - note.start)
-      const envelope = Math.sin(Math.PI * local)
-      return sum + Math.sin(2 * Math.PI * note.frequency * time) * envelope * note.gain
-    }, 0)
-    const sweep = Math.sin(2 * Math.PI * (320 + time * 62) * time) * Math.sin(Math.PI * Math.min(1, time / 2)) * Math.sin(Math.PI * Math.min(1, (10 - time) / 1.6)) * 0.045
-    view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, value + sweep)) * 0x7fff, true)
-  }
-
-  let binary = ''
-  const bytes = new Uint8Array(buffer)
-  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i])
-  return `data:audio/wav;base64,${btoa(binary)}`
-}
-
-export const playTourMeIntroAudio = () => {
-  if (typeof window === 'undefined') return
-  try {
-    const audio = new Audio(makeTourAudioDataUrl())
-    ;(window as typeof window & { tourMeIntroAudio?: HTMLAudioElement }).tourMeIntroAudio = audio
-    audio.muted = false
-    audio.volume = 1
-    audio.currentTime = 0
-    void audio.play().catch(() => {
-      window.setTimeout(() => {
-        void audio.play().catch(() => undefined)
-      }, 80)
-    })
-  } catch {
-    /* Fall back to Web Audio below. */
-  }
-
-  const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!AudioContextCtor) return
-  try {
-    const context = new AudioContextCtor()
-    void context.resume()
-    const startedAt = context.currentTime + 0.02
-    const master = context.createGain()
-    master.gain.setValueAtTime(0.0001, startedAt)
-    master.gain.exponentialRampToValueAtTime(0.55, startedAt + 0.05)
-    master.gain.exponentialRampToValueAtTime(0.0001, startedAt + 10)
-    master.connect(context.destination)
-
-    const tone = (frequency: number, start: number, duration: number, volume = 0.28, type: OscillatorType = 'sine') => {
-      const oscillator = context.createOscillator()
-      const gain = context.createGain()
-      oscillator.type = type
-      oscillator.frequency.setValueAtTime(frequency, startedAt + start)
-      oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.12, startedAt + start + duration)
-      gain.gain.setValueAtTime(0.0001, startedAt + start)
-      gain.gain.exponentialRampToValueAtTime(volume, startedAt + start + 0.03)
-      gain.gain.exponentialRampToValueAtTime(0.0001, startedAt + start + duration)
-      oscillator.connect(gain)
-      gain.connect(master)
-      oscillator.start(startedAt + start)
-      oscillator.stop(startedAt + start + duration + 0.04)
-    }
-
-    tone(146.83, 0, 9.7, 0.13, 'triangle')
-    tone(220, 0.9, 8.5, 0.11, 'sine')
-    ;[523.25, 659.25, 783.99, 987.77, 587.33, 739.99, 880, 1046.5, 1174.66, 1318.51].forEach((frequency, index) => {
-      tone(frequency, 3.1 + index * 0.5, index === 9 ? 0.36 : 0.22, index === 9 ? 0.24 : 0.2)
-    })
-    tone(320, 4.4, 4.9, 0.09, 'sawtooth')
-    window.setTimeout(() => context.close().catch(() => undefined), 10400)
-  } catch {
-    /* Some browsers mute generated audio until a direct user gesture. */
-  }
-}
-
 const coordsForVlog = (vlog: { title: string; location?: string | null; country?: string | null }) => {
   const haystack = normalizeLocationKey(`${vlog.location || ''} ${vlog.country || ''} ${vlog.title || ''}`)
   const match = Object.entries(LOCATION_COORDS).find(([key]) => haystack.includes(key))
@@ -371,6 +266,10 @@ const getEmbedUrl = (url: string) => {
   const ytSearch = url.match(/youtube\.com\/results\?search_query=([^&]+)/)
   if (ytSearch) return `https://www.youtube.com/embed?listType=search&list=${ytSearch[1]}&controls=1&rel=0`
   return null
+}
+
+const sendYouTubeCommand = (iframe: HTMLIFrameElement, func: 'unMute' | 'playVideo') => {
+  iframe.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args: [] }), 'https://www.youtube.com')
 }
 
 const isDirectVideoUrl = (url: string) =>
@@ -490,6 +389,130 @@ const PersonAvatar = ({ small = false }: { small?: boolean }) => (
   </svg>
 )
 
+interface TourClipReelProps {
+  clips: TourAreaClip[]
+  currentClipIndex: number
+  clipsContainerRef: MutableRefObject<HTMLDivElement | null>
+  observerRef: MutableRefObject<IntersectionObserver | null>
+  videoRefs: MutableRefObject<Map<string, HTMLVideoElement>>
+  iframeRefs: MutableRefObject<Map<string, HTMLIFrameElement>>
+}
+
+function TourClipReel({
+  clips,
+  currentClipIndex,
+  clipsContainerRef,
+  observerRef,
+  videoRefs,
+  iframeRefs,
+}: TourClipReelProps) {
+  return (
+    <div ref={clipsContainerRef} className="tour-tiktok-container">
+      {clips.map((clip, index) => {
+        const embedUrl = getEmbedUrl(clip.url)
+        const isActive = index === currentClipIndex
+        const posterImage = clip.coverImage || youtubeThumbForUrl(clip.url)
+        return (
+          <div
+            key={clip.id}
+            className="tour-tiktok-clip"
+            data-clip-id={clip.id}
+            ref={(el) => {
+              if (el && observerRef.current) {
+                observerRef.current.observe(el)
+              }
+            }}
+          >
+            <div className="tour-tiktok-video">
+              {!isActive && posterImage ? (
+                <img className="tour-tiktok-video-element" src={posterImage} alt="" loading="lazy" />
+              ) : isDirectVideoUrl(clip.url) ? (
+                <video
+                  ref={(el) => {
+                    if (el) {
+                      videoRefs.current.set(clip.id, el)
+                    } else {
+                      videoRefs.current.delete(clip.id)
+                    }
+                  }}
+                  src={clip.url}
+                  playsInline
+                  controls
+                  autoPlay={isActive}
+                  className="tour-tiktok-video-element"
+                />
+              ) : embedUrl ? (
+                <iframe
+                  key={`${clip.id}-active-player`}
+                  ref={(el) => {
+                    if (el) {
+                      iframeRefs.current.set(clip.id, el)
+                    } else {
+                      iframeRefs.current.delete(clip.id)
+                    }
+                  }}
+                  src={`${embedUrl}&autoplay=1&mute=0&loop=0&controls=1&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}`}
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                  referrerPolicy="origin"
+                  title={clip.title}
+                  className="tour-tiktok-video-element"
+                  onLoad={event => {
+                    const iframe = event.currentTarget
+                    window.setTimeout(() => {
+                      sendYouTubeCommand(iframe, 'unMute')
+                      sendYouTubeCommand(iframe, 'playVideo')
+                    }, 120)
+                  }}
+                />
+              ) : null}
+            </div>
+
+            <div className="tour-tiktok-overlay">
+              <div className="tour-tiktok-info">
+                <div className="tour-tiktok-author">
+                  <div className="tour-tiktok-avatar" style={{ background: `var(--${clip.author.avatarColor})` }}>
+                    {clip.author.initials}
+                  </div>
+                  <span className="tour-tiktok-handle">@{clip.author.handle}</span>
+                  {clip.author.verified && <span className="tour-tiktok-verified">âœ“</span>}
+                </div>
+                <h3 className="tour-tiktok-title">{clip.title}</h3>
+                <p className="tour-tiktok-description">{clip.description}</p>
+                <div className="tour-tiktok-location">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  </svg>
+                  {clip.location}
+                </div>
+              </div>
+
+              <div className="tour-tiktok-actions">
+                <button className="tour-tiktok-action-btn">
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                  </svg>
+                  <span>{shortCount(clip.likes)}</span>
+                </button>
+                <button className="tour-tiktok-action-btn">
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                    <path d="M15 12c0 1.654-1.346 3-3 3s-3-1.346-3-3 1.346-3 3-3 3 1.346 3 3zm9-.449s-4.252 8.449-11.985 8.449c-7.18 0-12.015-8.449-12.015-8.449s4.446-7.551 12.015-7.551c7.694 0 11.985 7.551 11.985 7.551zm-7 .449c0-2.757-2.243-5-5-5s-5 2.243-5 5 2.243 5 5 5 5-2.243 5-5z"/>
+                  </svg>
+                  <span>{shortCount(clip.views)}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="tour-tiktok-counter">
+              {index + 1} / {clips.length}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }: TourMeProps) {
   const [stage, setStage] = useState<'world' | 'place'>('world')
   const [mapMode, setMapMode] = useState<'map' | 'street'>('map')
@@ -500,11 +523,12 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const [travelCue, setTravelCue] = useState<{ key: number; direction: 1 | -1; from: string; to: string; fromDest: TourDestination; toDest: TourDestination } | null>(null)
   const [currentClipIndex, setCurrentClipIndex] = useState(0)
   const travelTimerRef = useRef<number | null>(null)
-  const lastAudioOpenRef = useRef(false)
   const clipsContainerRef = useRef<HTMLDivElement>(null)
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
+  const iframeRefs = useRef<Map<string, HTMLIFrameElement>>(new Map())
   const videoEndHandlersRef = useRef<Map<string, () => void>>(new Map())
   const observerRef = useRef<IntersectionObserver | null>(null)
+  const globeAudioRef = useRef<GlobeAudioState | null>(null)
 
   const destinations = useMemo<TourDestination[]>(() => {
     const rankedVlogs = [...vlogs].sort((a, b) => destinationScore(b) - destinationScore(a))
@@ -623,21 +647,124 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
       if (!response.ok) return
       const nextDetail: VlogDetail = await response.json()
       setDetail(nextDetail)
-      setClipId(nextDetail.itinerary[0]?.id || '')
     } catch {
       /* keep the current tour state */
     }
   }, [])
 
+  const stopGlobeAudio = useCallback(() => {
+    const audio = globeAudioRef.current
+    if (!audio) return
+    globeAudioRef.current = null
+
+    const now = audio.context.currentTime
+    audio.master.gain.cancelScheduledValues(now)
+    audio.master.gain.setTargetAtTime(0, now, 0.05)
+
+    window.setTimeout(() => {
+      audio.oscillators.forEach(oscillator => {
+        try {
+          oscillator.stop()
+        } catch {
+          /* already stopped */
+        }
+      })
+      try {
+        audio.lfo.stop()
+      } catch {
+        /* already stopped */
+      }
+      try {
+        audio.noiseSource.stop()
+      } catch {
+        /* already stopped */
+      }
+      audio.context.close().catch(() => undefined)
+    }, 140)
+  }, [])
+
+  const startGlobeAudio = useCallback(() => {
+    if (globeAudioRef.current || typeof window === 'undefined') return
+
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) return
+
+    try {
+      const context = new AudioContextCtor()
+      const master = context.createGain()
+      master.gain.setValueAtTime(0, context.currentTime)
+      master.gain.linearRampToValueAtTime(0.16, context.currentTime + 0.7)
+      master.connect(context.destination)
+
+      const lfo = context.createOscillator()
+      const lfoGain = context.createGain()
+      lfo.type = 'sine'
+      lfo.frequency.value = 0.42
+      lfoGain.gain.value = 0.035
+      lfo.connect(lfoGain)
+      lfoGain.connect(master.gain)
+
+      const toneConfig: Array<[OscillatorType, number, number]> = [
+        ['sine', 146.83, 0.2],
+        ['triangle', 220, 0.07],
+        ['sine', 293.66, 0.045],
+      ]
+      const oscillators = toneConfig.map(([type, frequency, gainValue]) => {
+        const oscillator = context.createOscillator()
+        const gain = context.createGain()
+        oscillator.type = type
+        oscillator.frequency.value = frequency
+        gain.gain.value = gainValue
+        oscillator.connect(gain)
+        gain.connect(master)
+        oscillator.start()
+        return oscillator
+      })
+
+      const noiseFilter = context.createBiquadFilter()
+      noiseFilter.type = 'lowpass'
+      noiseFilter.frequency.value = 620
+      noiseFilter.Q.value = 0.4
+
+      const noiseGain = context.createGain()
+      noiseGain.gain.value = 0.025
+      const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate)
+      const channel = buffer.getChannelData(0)
+      for (let i = 0; i < channel.length; i += 1) {
+        channel[i] = (Math.random() * 2 - 1) * (1 - i / channel.length)
+      }
+      const noiseSource = context.createBufferSource()
+      noiseSource.buffer = buffer
+      noiseSource.loop = true
+      noiseSource.connect(noiseFilter)
+      noiseFilter.connect(noiseGain)
+      noiseGain.connect(master)
+
+      lfo.start()
+      noiseSource.start()
+      globeAudioRef.current = { context, master, oscillators, lfo, noiseSource }
+      context.resume().catch(() => stopGlobeAudio())
+    } catch {
+      globeAudioRef.current = null
+    }
+  }, [stopGlobeAudio])
+
   const selectDestination = useCallback((destination: TourDestination, options?: { street?: boolean }) => {
+    stopGlobeAudio()
     setVlogId(destination.id)
     setClipId('')
+    setCurrentClipIndex(0)
     setDetail(null)
     loadDetail(destination.id)
     loadAreaClips(destination)
     setMapMode(destination.hasStreetView ? 'street' : 'map')
     setStage('place')
-  }, [loadAreaClips, loadDetail])
+  }, [loadAreaClips, loadDetail, stopGlobeAudio])
+
+  const closeTourMe = useCallback(() => {
+    stopGlobeAudio()
+    onClose()
+  }, [onClose, stopGlobeAudio])
 
   const playNextClip = useCallback(() => {
     if (!displayedAreaClips.length) return
@@ -647,6 +774,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
 
   const moveDestination = (direction: 1 | -1) => {
     if (!destinations.length || !selectedDestination) return
+    stopGlobeAudio()
     const currentIndex = destinations.findIndex(destination => destination.id === selectedDestination.id)
     const nextIndex = (Math.max(0, currentIndex) + direction + destinations.length) % destinations.length
     const nextDestination = destinations[nextIndex]
@@ -670,6 +798,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     // After the travel animation, switch to the new destination with full details.
     travelTimerRef.current = window.setTimeout(() => {
       setClipId('')
+      setCurrentClipIndex(0)
       setDetail(null)
       loadDetail(nextDestination.id)
       loadAreaClips(nextDestination)
@@ -687,18 +816,20 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   }, [travelCue])
 
   useEffect(() => {
-    return () => {
-      if (travelTimerRef.current) window.clearTimeout(travelTimerRef.current)
+    if (open && stage === 'world' && !travelCue) {
+      startGlobeAudio()
+      return
     }
-  }, [])
+
+    stopGlobeAudio()
+  }, [open, stage, startGlobeAudio, stopGlobeAudio, travelCue])
 
   useEffect(() => {
-    if (open && !lastAudioOpenRef.current) {
-      playTourMeIntroAudio()
-      lastAudioOpenRef.current = true
+    return () => {
+      if (travelTimerRef.current) window.clearTimeout(travelTimerRef.current)
+      stopGlobeAudio()
     }
-    if (!open) lastAudioOpenRef.current = false
-  }, [open])
+  }, [stopGlobeAudio])
 
   useEffect(() => {
     if (!destinations.length) return
@@ -711,12 +842,26 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     if (!open) return
     setStage('world')
     setCurrentClipIndex(0)
+    setClipId('')
     if (destinations[0]) {
       setVlogId(destinations[0].id)
       loadDetail(destinations[0].id)
       loadAreaClips(destinations[0])
     }
   }, [destinations, loadAreaClips, loadDetail, open])
+
+  useEffect(() => {
+    if (stage !== 'place' || !displayedAreaClips.length) return
+
+    const currentIndex = displayedAreaClips.findIndex(clip => clip.id === clipId)
+    if (currentIndex >= 0) {
+      setCurrentClipIndex(currentIndex)
+      return
+    }
+
+    setCurrentClipIndex(0)
+    setClipId(displayedAreaClips[0].id)
+  }, [clipId, displayedAreaClips, stage])
 
   // TikTok-style intersection observer for autoplay
   useEffect(() => {
@@ -798,6 +943,34 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     window.addEventListener('message', handleYoutubeMessage)
     return () => window.removeEventListener('message', handleYoutubeMessage)
   }, [clipId, displayedAreaClips, scrollToClipIndex, stage])
+
+  useEffect(() => {
+    if (stage === 'place') return
+
+    iframeRefs.current.clear()
+  }, [stage])
+
+  useEffect(() => {
+    if (stage !== 'place' || !clipId) return
+
+    videoRefs.current.forEach((video, id) => {
+      if (id === clipId) {
+        video.muted = false
+        video.volume = 1
+        video.play().catch(() => {
+          /* The browser may still require a user gesture on some devices. */
+        })
+      } else {
+        video.pause()
+      }
+    })
+
+    const iframe = iframeRefs.current.get(clipId)
+    if (iframe) {
+      sendYouTubeCommand(iframe, 'unMute')
+      sendYouTubeCommand(iframe, 'playVideo')
+    }
+  }, [clipId, stage])
 
   // Auto-advance to next clip when video ends
   useEffect(() => {
@@ -979,7 +1152,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
           <div className="tour-panel-sticky">
               <div className="tour-panel-head">
                 <div className="tour-title-block">
-                  <div className="tour-kicker">{stage === 'world' ? 'TourMe Adventure' : `Fun things to explore in ${displayedDestination?.name || 'this spot'}`}</div>
+                  <div className="tour-kicker">{stage === 'world' ? 'TourMe Adventure' : `Creator clips in ${displayedDestination?.name || 'this spot'}`}</div>
                   <h2>{stage === 'world' ? 'Start with the best spots' : (displayedDestination?.name || 'Live destinations')}</h2>
                   <p>{stage === 'world' ? 'Pick a pin and let the country route unfold from real creator data.' : `${displayedDestination?.city}, ${displayedDestination?.country}`}</p>
                 </div>
@@ -993,94 +1166,20 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
                 </button>
               </div>
             )}
-            <button className="tour-close" onClick={onClose} aria-label="Close tour me">×</button>
+            <button className="tour-close" onClick={closeTourMe} aria-label="Close tour me">×</button>
           </div>
           <p className="tour-destination-summary">{displayedDescription}</p>
           </div>
           {/* TikTok-style vertical scrolling clips */}
           {stage === 'place' && displayedAreaClips.length > 0 ? (
-            <div ref={clipsContainerRef} className="tour-tiktok-container">
-              {displayedAreaClips.map((clip, index) => {
-                const embedUrl = getEmbedUrl(clip.url)
-                return (
-                  <div
-                    key={clip.id}
-                    className="tour-tiktok-clip"
-                    data-clip-id={clip.id}
-                    ref={(el) => {
-                      if (el && observerRef.current) {
-                        observerRef.current.observe(el)
-                      }
-                    }}
-                  >
-                    <div className="tour-tiktok-video">
-                      {isDirectVideoUrl(clip.url) ? (
-                        <video
-                          ref={(el) => {
-                            if (el) videoRefs.current.set(clip.id, el)
-                          }}
-                          src={clip.url}
-                          playsInline
-                          muted={false}
-                          autoPlay={index === currentClipIndex}
-                          className="tour-tiktok-video-element"
-                        />
-                      ) : embedUrl ? (
-                        <iframe
-                          src={`${embedUrl}&autoplay=${index === currentClipIndex ? '1' : '0'}&mute=0&loop=0&controls=1&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}`}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          title={clip.title}
-                          className="tour-tiktok-video-element"
-                        />
-                      ) : null}
-                    </div>
-
-                    {/* Overlay info */}
-                    <div className="tour-tiktok-overlay">
-                      <div className="tour-tiktok-info">
-                        <div className="tour-tiktok-author">
-                          <div className="tour-tiktok-avatar" style={{ background: `var(--${clip.author.avatarColor})` }}>
-                            {clip.author.initials}
-                          </div>
-                          <span className="tour-tiktok-handle">@{clip.author.handle}</span>
-                          {clip.author.verified && <span className="tour-tiktok-verified">✓</span>}
-                        </div>
-                        <h3 className="tour-tiktok-title">{clip.title}</h3>
-                        <p className="tour-tiktok-description">{clip.description}</p>
-                        <div className="tour-tiktok-location">
-                          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                          </svg>
-                          {clip.location}
-                        </div>
-                      </div>
-
-                      {/* Side actions */}
-                      <div className="tour-tiktok-actions">
-                        <button className="tour-tiktok-action-btn">
-                          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                          </svg>
-                          <span>{shortCount(clip.likes)}</span>
-                        </button>
-                        <button className="tour-tiktok-action-btn">
-                          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                            <path d="M15 12c0 1.654-1.346 3-3 3s-3-1.346-3-3 1.346-3 3-3 3 1.346 3 3zm9-.449s-4.252 8.449-11.985 8.449c-7.18 0-12.015-8.449-12.015-8.449s4.446-7.551 12.015-7.551c7.694 0 11.985 7.551 11.985 7.551zm-7 .449c0-2.757-2.243-5-5-5s-5 2.243-5 5 2.243 5 5 5 5-2.243 5-5z"/>
-                          </svg>
-                          <span>{shortCount(clip.views)}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Clip counter */}
-                    <div className="tour-tiktok-counter">
-                      {index + 1} / {displayedAreaClips.length}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            <TourClipReel
+              clips={displayedAreaClips}
+              currentClipIndex={currentClipIndex}
+              clipsContainerRef={clipsContainerRef}
+              observerRef={observerRef}
+              videoRefs={videoRefs}
+              iframeRefs={iframeRefs}
+            />
           ) : stage === 'world' ? (
             <div className="tour-destination-list" aria-label="Tour route destinations">
               {destinations.map(destination => (
