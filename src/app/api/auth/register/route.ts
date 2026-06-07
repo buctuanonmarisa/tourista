@@ -23,12 +23,12 @@ export async function POST(req: NextRequest) {
   const handle = handleFor(String(body.handle || name))
 
   if (!name || !handle) {
-    return NextResponse.json({ error: 'Add your name and a simple handle to register.' }, { status: 400 })
+    return NextResponse.json({ error: 'Add your name and a simple username to register.' }, { status: 400 })
   }
 
   const existing = await prisma.user.findUnique({ where: { handle } })
   if (existing) {
-    return NextResponse.json({ error: 'That handle is already taken. Try another one or log in with it.' }, { status: 409 })
+    return NextResponse.json({ error: 'That username is already taken. Try another one or log in with it.' }, { status: 409 })
   }
 
   const user = await prisma.user.create({

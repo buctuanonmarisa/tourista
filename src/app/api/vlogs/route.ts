@@ -153,6 +153,12 @@ const buildItineraryMedia = (day: {
   return media.length ? media : fallback
 }
 
+const dayPlaceFor = (day: { activity?: string; placeName?: string; placeQuery?: string }, vlogLocation: string, country: string) => {
+  const placeName = String(day.placeName || day.activity || '').trim()
+  const placeQuery = String(day.placeQuery || [placeName, vlogLocation, country].filter(Boolean).join(', ')).trim()
+  return { placeName: placeName || null, placeQuery: placeQuery || null }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const search = searchParams.get('search') || ''
@@ -284,14 +290,18 @@ export async function POST(req: NextRequest) {
                 create: body.itinerary.map((d: {
                   day: number; activity: string; cost: string; locked: boolean
                   highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
+                  placeName?: string; placeQuery?: string
                   mediaUrl?: string; mediaType?: string; clipUrl?: string
                   clipUrls?: string[]
                   media?: Array<{ url: string; type: 'image' | 'video' }>
                 }) => {
                   const media = buildItineraryMedia(d)
+                  const place = dayPlaceFor(d, locationBase, country)
                   return {
                     day: d.day,
                     activity: d.activity || d.highlights?.slice(0, 120) || `Day ${d.day}`,
+                    placeName: place.placeName,
+                    placeQuery: place.placeQuery,
                     cost: d.cost ? stripNonDigit(d.cost) : null,
                     locked: d.locked || false,
                     highlights: d.highlights || null,

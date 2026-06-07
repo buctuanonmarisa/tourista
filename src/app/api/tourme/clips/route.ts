@@ -65,10 +65,11 @@ export async function GET(req: NextRequest) {
   const clips = vlogs.flatMap(vlog =>
     vlog.itinerary.flatMap(day =>
       parseMedia(day)
-        .filter((item: { url?: string; type?: string }) => item.type === 'video' && item.url)
+        .filter((item: { url?: string; type?: string }) => item.url)
         .map((item: { url: string; type: string }, mediaIndex: number) => ({
           id: `${day.id}-${mediaIndex}`,
           url: item.url,
+          type: item.type === 'video' ? 'video' : 'image',
           title: day.activity,
           description: day.highlights || day.tips || day.description || vlog.description || '',
           day: day.day,

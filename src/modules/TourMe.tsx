@@ -90,6 +90,7 @@ interface TourDestination {
 interface TourAreaClip {
   id: string
   url: string
+  type?: 'image' | 'video'
   title: string
   description?: string | null
   day: number
@@ -277,6 +278,10 @@ const isDirectVideoUrl = (url: string) =>
   url.startsWith('/api/uploads/') ||
   /\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(url)
 
+const isImageUrl = (url: string) =>
+  url.startsWith('/api/generated-travel-image') ||
+  /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i.test(url)
+
 const osmTile = (lat: number, lng: number, zoom = 13) => {
   const latRad = lat * Math.PI / 180
   const scale = 2 ** zoom
@@ -396,6 +401,7 @@ interface TourClipReelProps {
   observerRef: MutableRefObject<IntersectionObserver | null>
   videoRefs: MutableRefObject<Map<string, HTMLVideoElement>>
   iframeRefs: MutableRefObject<Map<string, HTMLIFrameElement>>
+  onClipEnded: (clipId: string) => void
 }
 
 function TourClipReel({
@@ -405,11 +411,13 @@ function TourClipReel({
   observerRef,
   videoRefs,
   iframeRefs,
+  onClipEnded,
 }: TourClipReelProps) {
   return (
     <div ref={clipsContainerRef} className="tour-tiktok-container">
       {clips.map((clip, index) => {
         const embedUrl = getEmbedUrl(clip.url)
+        const isImage = clip.type === 'image' || (!clip.type && isImageUrl(clip.url))
         const isActive = index === currentClipIndex
         const posterImage = clip.coverImage || youtubeThumbForUrl(clip.url)
         return (
@@ -424,7 +432,9 @@ function TourClipReel({
             }}
           >
             <div className="tour-tiktok-video">
-              {!isActive && posterImage ? (
+              {isImage ? (
+                <img className="tour-tiktok-video-element" src={clip.url} alt={clip.title} loading={isActive ? 'eager' : 'lazy'} />
+              ) : !isActive && posterImage ? (
                 <img className="tour-tiktok-video-element" src={posterImage} alt="" loading="lazy" />
               ) : isDirectVideoUrl(clip.url) ? (
                 <video
@@ -439,6 +449,7 @@ function TourClipReel({
                   playsInline
                   controls
                   autoPlay={isActive}
+                  onEnded={() => onClipEnded(clip.id)}
                   className="tour-tiktok-video-element"
                 />
               ) : embedUrl ? (
@@ -483,7 +494,7 @@ function TourClipReel({
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
                   </svg>
-                  {clip.location}
+                  {isImage ? 'Photo' : clip.location}
                 </div>
               </div>
 
@@ -526,7 +537,6 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const clipsContainerRef = useRef<HTMLDivElement>(null)
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
   const iframeRefs = useRef<Map<string, HTMLIFrameElement>>(new Map())
-  const videoEndHandlersRef = useRef<Map<string, () => void>>(new Map())
   const observerRef = useRef<IntersectionObserver | null>(null)
   const globeAudioRef = useRef<GlobeAudioState | null>(null)
 
@@ -593,10 +603,10 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
   const selectedClip = clipItems.find(day => day.id === clipId) || clipItems[0]
   const fallbackAreaClips: TourAreaClip[] = clipItems.flatMap(day =>
     mediaForDay(day)
-      .filter(item => item.type === 'video')
       .map((item, index) => ({
         id: `${day.id}-${index}`,
         url: item.url,
+        type: item.type,
         title: clipLabelFor(day, index),
         description: day.highlights || day.tips || selectedDestination?.title || '',
         day: typeof day.day === 'number' ? day.day : day.day.day,
@@ -619,7 +629,7 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     const clipElements = container.querySelectorAll('.tour-tiktok-clip')
     const nextElement = clipElements[boundedIndex] as HTMLElement | undefined
     if (nextElement) {
-      nextElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      container.scrollTo({ top: nextElement.offsetTop - container.offsetTop, behavior: 'smooth' })
       setCurrentClipIndex(boundedIndex)
       setClipId(displayedAreaClips[boundedIndex].id)
     }
@@ -634,7 +644,12 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
         return
       }
       const data: { clips?: TourAreaClip[] } = await response.json()
-      setAreaClips(Array.isArray(data.clips) ? data.clips : [])
+      setAreaClips(Array.isArray(data.clips)
+        ? data.clips.map(clip => ({
+            ...clip,
+            type: clip.type || (isImageUrl(clip.url) ? 'image' : 'video'),
+          }))
+        : [])
     } catch {
       setAreaClips([])
     }
@@ -926,11 +941,10 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     if (!displayedAreaClips.length || stage !== 'place') return
 
     const handleYoutubeMessage = (event: MessageEvent) => {
-      if (typeof event.data !== 'string') return
       if (!String(event.origin).includes('youtube.com')) return
 
       try {
-        const data = JSON.parse(event.data)
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
         if (data.event === 'onStateChange' && data.info === 0) {
           const currentIndex = displayedAreaClips.findIndex(clip => clip.id === clipId)
           scrollToClipIndex(currentIndex + 1)
@@ -943,6 +957,15 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
     window.addEventListener('message', handleYoutubeMessage)
     return () => window.removeEventListener('message', handleYoutubeMessage)
   }, [clipId, displayedAreaClips, scrollToClipIndex, stage])
+
+  useEffect(() => {
+    if (displayedAreaClips.length <= 1 || stage !== 'place') return
+    const activeClip = displayedAreaClips[currentClipIndex]
+    if (activeClip?.type !== 'image') return
+
+    const timer = window.setTimeout(() => scrollToClipIndex(currentClipIndex + 1), 5000)
+    return () => window.clearTimeout(timer)
+  }, [currentClipIndex, displayedAreaClips, scrollToClipIndex, stage])
 
   useEffect(() => {
     if (stage === 'place') return
@@ -971,38 +994,6 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
       sendYouTubeCommand(iframe, 'playVideo')
     }
   }, [clipId, stage])
-
-  // Auto-advance to next clip when video ends
-  useEffect(() => {
-    const handleVideoEnd = (clipId: string) => {
-      const currentIndex = displayedAreaClips.findIndex(c => c.id === clipId)
-      scrollToClipIndex(currentIndex + 1)
-    }
-
-    const videoRefsMap = videoRefs.current
-    const videoEndHandlersMap = videoEndHandlersRef.current
-
-    videoEndHandlersMap.forEach((handler, clipId) => {
-      const video = videoRefsMap.get(clipId)
-      if (video) video.removeEventListener('ended', handler)
-    })
-    videoEndHandlersMap.clear()
-
-    // Add ended listeners to all videos
-    videoRefsMap.forEach((video, clipId) => {
-      const handler = () => handleVideoEnd(clipId)
-      video.addEventListener('ended', handler)
-      videoEndHandlersMap.set(clipId, handler)
-    })
-
-    return () => {
-      videoEndHandlersMap.forEach((handler, clipId) => {
-        const video = videoRefsMap.get(clipId)
-        if (video) video.removeEventListener('ended', handler)
-      })
-      videoEndHandlersMap.clear()
-    }
-  }, [displayedAreaClips, scrollToClipIndex])
 
   if (!open) return null
 
@@ -1179,6 +1170,10 @@ export default function TourMe({ open, onClose, vlogs, profileInitials = 'ME' }:
               observerRef={observerRef}
               videoRefs={videoRefs}
               iframeRefs={iframeRefs}
+              onClipEnded={clipId => {
+                const currentIndex = displayedAreaClips.findIndex(clip => clip.id === clipId)
+                scrollToClipIndex(currentIndex + 1)
+              }}
             />
           ) : stage === 'world' ? (
             <div className="tour-destination-list" aria-label="Tour route destinations">

@@ -79,6 +79,8 @@ model ItineraryDay {
   cost            Int?
   locked          Boolean @default(false)
   description     String?
+  placeName       String?
+  placeQuery      String?
   clipDuration    String?
   clipDescription String?
   highlights      String?

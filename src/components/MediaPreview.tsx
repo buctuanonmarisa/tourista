@@ -9,6 +9,7 @@ interface MediaPreviewProps {
   autoplay?: boolean
   fallbackImageUrl?: string
   onImageFallback?: (image: HTMLImageElement) => void
+  onVideoEnded?: () => void
 }
 
 export const getEmbedUrl = (url: string) => {
@@ -27,6 +28,11 @@ export const withAutoplay = (url: string, muted = true) =>
 export const withManualPlayback = (url: string, muted = false) =>
   `${url}${url.includes('?') ? '&' : '?'}autoplay=0&mute=${muted ? '1' : '0'}&playsinline=1`
 
+const withPlayerApi = (url: string) => {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return `${url}${url.includes('?') ? '&' : '?'}enablejsapi=1${origin ? `&origin=${encodeURIComponent(origin)}` : ''}`
+}
+
 export const directVideoUrl = (url: string) =>
   url.startsWith('blob:') ||
   url.startsWith('/api/uploads/') ||
@@ -35,10 +41,10 @@ export const directVideoUrl = (url: string) =>
 export const clipPreviewUrl = (url: string, autoplay = false) => {
   const embed = getEmbedUrl(url)
   if (!embed) return null
-  return autoplay ? withAutoplay(embed, false) : withManualPlayback(embed)
+  return withPlayerApi(autoplay ? withAutoplay(embed, false) : withManualPlayback(embed))
 }
 
-export default function MediaPreview({ item, title, autoplay = false, fallbackImageUrl, onImageFallback }: MediaPreviewProps) {
+export default function MediaPreview({ item, title, autoplay = false, fallbackImageUrl, onImageFallback, onVideoEnded }: MediaPreviewProps) {
   if (item.type !== 'video') {
     return (
       <img
@@ -63,7 +69,7 @@ export default function MediaPreview({ item, title, autoplay = false, fallbackIm
   }
 
   if (directVideoUrl(item.url)) {
-    return <video src={item.url} preload={autoplay ? 'auto' : 'metadata'} playsInline controls autoPlay={autoplay} muted={false} />
+    return <video src={item.url} preload={autoplay ? 'auto' : 'metadata'} playsInline controls autoPlay={autoplay} muted={false} onEnded={onVideoEnded} />
   }
 
   return (

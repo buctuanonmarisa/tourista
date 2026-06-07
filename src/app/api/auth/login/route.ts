@@ -10,12 +10,12 @@ export async function POST(req: NextRequest) {
   const handle = cleanHandle(String(body.handle || ''))
 
   if (!handle) {
-    return NextResponse.json({ error: 'Enter your handle to continue.' }, { status: 400 })
+    return NextResponse.json({ error: 'Enter your username to continue.' }, { status: 400 })
   }
 
   const user = await prisma.user.findUnique({ where: { handle } })
   if (!user) {
-    return NextResponse.json({ error: 'No profile uses that handle yet. Register first.' }, { status: 404 })
+    return NextResponse.json({ error: 'No profile uses that username yet. Register first.' }, { status: 404 })
   }
 
   const response = NextResponse.json({ user })

@@ -14,6 +14,10 @@ import { FALLBACK_VIBES, FALLBACK_COUNTRIES } from '@/lib/travel-options'
 type GeneratedItineraryDay = {
   day?: number
   activity?: string
+  place_name?: string
+  placeName?: string
+  place_query?: string
+  placeQuery?: string
   highlights?: string
   food_tips?: string
   foodTips?: string
@@ -360,13 +364,15 @@ const openAIResponseFormat = {
           properties: {
             day: { type: 'number' },
             activity: { type: 'string' },
+            place_name: { type: 'string' },
+            place_query: { type: 'string' },
             highlights: { type: 'string' },
             food_tips: { type: 'string' },
             getting_there: { type: 'string' },
             tips: { type: 'string' },
             estimated_cost_php: { type: 'string' },
           },
-          required: ['day', 'activity', 'highlights', 'food_tips', 'getting_there', 'tips', 'estimated_cost_php'],
+          required: ['day', 'activity', 'place_name', 'place_query', 'highlights', 'food_tips', 'getting_there', 'tips', 'estimated_cost_php'],
         },
       },
     },
@@ -407,6 +413,8 @@ TASK: Generate a JSON response with these exact fields:
     {
       "day": 1,
       "activity": "Specific main activity for this day",
+      "place_name": "Specific place, landmark, neighborhood, beach, station, attraction, or route anchor for this day",
+      "place_query": "Best Google Maps search query for street view/map, including city and country, e.g. 'Buckingham Palace, London, United Kingdom'",
       "highlights": "✨ Use emojis! 3-4 specific attractions, moments, or shots from this day. Be descriptive and exciting. Example: '🏛️ Explored the ancient pyramids at sunrise, 🐪 camel ride through the desert, 📸 sunset at the Sphinx'",
       "food_tips": "🍜 Use emojis! Where/what to eat and realistic meal advice. Include specific dishes, restaurant types, and price ranges. Example: '🥙 Try koshari at local street vendors (₱150-200), 🍰 Must-try: Om Ali dessert at Naguib Mahfouz Cafe, 🥤 Fresh sugarcane juice everywhere (₱50)'",
       "getting_there": "🚌 Use emojis! Transport route, how to move around, and fare guidance. Be specific about transport types and costs. Example: '🚕 Uber from airport to hotel (₱800-1000), 🚇 Metro is cheapest (₱20/ride), 🚌 Day tour buses (₱1500 with guide)'",
@@ -431,7 +439,8 @@ IMPORTANT:
 - Return one itinerary object for every estimated day, up to 10 days maximum
 - Make every itinerary day distinct and useful, not generic filler
 - Day 1 and Day 2 should be free-preview quality; later days can be premium detail
-- Include food_tips, getting_there, tips, highlights, activity, and estimated_cost_php for every day
+- Include food_tips, getting_there, tips, highlights, activity, place_name, place_query, and estimated_cost_php for every day
+- place_query powers the Tour Me street-view map. Use the most specific real place mentioned or inferred from that day, including city and country.
 - Keep descriptions engaging and informative
 - **CRITICAL: The "country" field MUST match the actual country or countries shown in the video. If the vlog crosses countries, return them as comma-separated values (example: "France, Italy, Switzerland"). Analyze the title, description, keywords, and transcript carefully. Only use "Philippines" as a fallback if no country can be determined from the video content.**
 - If the country is clearly mentioned in the title (e.g., "Egypt Travel Guide"), use that country
@@ -653,6 +662,12 @@ const placesFromMetadata = (metadata: YouTubeMetadata, countries: string[]) => {
   return Array.from(new Set(mentioned.length ? mentioned : knownPlaces)).slice(0, 9)
 }
 
+const dayPlace = (day: GeneratedItineraryDay, fallbackPlace: string, country: string) => {
+  const placeName = compactWhitespace(String(day.placeName || day.place_name || fallbackPlace || day.activity || country))
+  const placeQuery = compactWhitespace(String(day.placeQuery || day.place_query || [placeName, country].filter(Boolean).join(', ')))
+  return { placeName, placeQuery }
+}
+
 function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
   const countries = countriesFromMetadata(metadata).slice(0, 6)
   const country = countries.join(', ')
@@ -664,6 +679,8 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
     const day: GeneratedItineraryDay = {
       day: index + 1,
       activity: `${place} travel highlights`,
+      placeName: place,
+      placeQuery: [place, primaryCountry].filter(Boolean).join(', '),
       highlights: `✨ Use this day for the strongest ${place} sights and scenic stops mentioned in the vlog.`,
       food_tips: `🍜 Try local food near the route and verify specific restaurants from the creator's video notes.`,
       getting_there: `🚕 Cluster nearby stops, use rideshare or local transport, and check drive times before booking.`,
@@ -674,6 +691,8 @@ function buildFallbackAIResponse(metadata: YouTubeMetadata, videoId: string) {
     return {
       day: index + 1,
       activity: day.activity || `Day ${index + 1}`,
+      placeName: day.placeName || place,
+      placeQuery: day.placeQuery || [place, primaryCountry].filter(Boolean).join(', '),
       highlights: conciseDetail(day.highlights, '✨'),
       foodTips: conciseDetail(day.food_tips, '🍜'),
       gettingThere: conciseDetail(day.getting_there, '🚕'),
@@ -716,6 +735,8 @@ function validateAIResponse(aiResponse: any, metadata: YouTubeMetadata, videoId:
     .map((day, index) => ({
       day: Number(day.day) || index + 1,
       activity: String(day.activity || `Day ${index + 1}`).slice(0, 180),
+      placeName: dayPlace(day, fallbackPlaces[index % fallbackPlaces.length] || primaryCountry, primaryCountry).placeName,
+      placeQuery: dayPlace(day, fallbackPlaces[index % fallbackPlaces.length] || primaryCountry, primaryCountry).placeQuery,
       highlights: conciseDetail(day.highlights, '✨'),
       foodTips: conciseDetail(day.foodTips || day.food_tips, '🍜'),
       gettingThere: conciseDetail(day.gettingThere || day.getting_there, '🚕'),

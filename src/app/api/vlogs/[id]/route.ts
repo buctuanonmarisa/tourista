@@ -53,6 +53,12 @@ const parseItineraryMedia = (day: { clipDescription?: string | null; mediaUrl?: 
   return day.mediaUrl ? [{ url: day.mediaUrl, type: day.mediaType === 'video' ? 'video' : 'image' }] : []
 }
 
+const dayPlaceFor = (day: { activity?: string; placeName?: string; placeQuery?: string }, vlogLocation: string, country: string) => {
+  const placeName = String(day.placeName || day.activity || '').trim()
+  const placeQuery = String(day.placeQuery || [placeName, vlogLocation, country].filter(Boolean).join(', ')).trim()
+  return { placeName: placeName || null, placeQuery: placeQuery || null }
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const vlog = await prisma.vlog.findUnique({
     where: { id: params.id },
@@ -114,14 +120,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           create: (body.itinerary || []).map((day: {
             day: number; activity?: string; cost?: string; locked?: boolean
             highlights?: string; foodTips?: string; gettingThere?: string; tips?: string
+            placeName?: string; placeQuery?: string
             mediaUrl?: string; mediaType?: string; clipUrl?: string
             clipUrls?: string[]
             media?: Array<{ url: string; type: 'image' | 'video' }>
           }) => {
             const media = buildItineraryMedia(day)
+            const place = dayPlaceFor(day, locationBase, country)
             return {
               day: day.day,
               activity: day.activity || day.highlights?.slice(0, 120) || `Day ${day.day}`,
+              placeName: place.placeName,
+              placeQuery: place.placeQuery,
               cost: day.cost ? stripNonDigit(day.cost) : null,
               locked: day.locked || false,
               highlights: day.highlights || null,

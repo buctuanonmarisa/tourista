@@ -17,6 +17,7 @@ interface ItineraryDay {
   id: string; day: number; activity: string; cost?: number | null
   locked: boolean; highlights?: string | null; foodTips?: string | null
   gettingThere?: string | null; tips?: string | null
+  placeName?: string | null; placeQuery?: string | null
   clipDescription?: string | null
   mediaUrl?: string | null; mediaType?: 'image' | 'video' | string | null
   media?: MediaItem[] | null
@@ -50,6 +51,7 @@ interface MediaItem {
 }
 interface ItineraryFormDay {
   day: number; activity: string; cost: string; locked: boolean
+  placeName?: string; placeQuery?: string
   mediaUrl?: string; mediaType?: 'image' | 'video' | null
   clipUrl?: string
   clipUrls?: string[]
@@ -267,6 +269,7 @@ export default function Home() {
   const [tourMeOpen, setTourMeOpen] = useState(false)
   const [itineraryTourVlog, setItineraryTourVlog] = useState<VlogDetail | null>(null)
   const [itineraryTourDayIndex, setItineraryTourDayIndex] = useState(0)
+  const [detailMediaIndex, setDetailMediaIndex] = useState(0)
   const [dashboardMonthIndex, setDashboardMonthIndex] = useState<number | null>(11)
 
   /* ─── Refs for file inputs ─── */
@@ -568,6 +571,8 @@ export default function Home() {
         const newItinDays = data.itinerary.map((day: any, idx: number) => ({
           day: day.day || idx + 1,
           activity: day.activity || '',
+          placeName: day.placeName || day.place_name || day.placeQuery || day.place_query || day.activity || '',
+          placeQuery: day.placeQuery || day.place_query || '',
           cost: day.cost || '',
           locked: idx >= 2, // Keep the first two AI-generated days open as the free preview.
           media: Array.isArray(day.media) ? day.media : [],
@@ -700,10 +705,10 @@ export default function Home() {
   const updDay = (i: number, k: keyof ItineraryFormDay, v: string | boolean | null) =>
     setItinDays(d => d.map((x, j) => j === i ? { ...x, [k]: v } : x))
 
-  const clipUrlsForDay = (day: Pick<ItineraryFormDay, 'clipUrl' | 'clipUrls'>) => {
+  const clipUrlsForDay = useCallback((day: Pick<ItineraryFormDay, 'clipUrl' | 'clipUrls'>) => {
     const urls = day.clipUrls?.length ? day.clipUrls : (day.clipUrl ? [day.clipUrl] : [''])
     return urls.length ? urls : ['']
-  }
+  }, [])
 
   const updateDayClipUrl = (dayIndex: number, clipIndex: number, value: string) => {
     setItinDays(days => days.map((day, index) => {
@@ -911,7 +916,7 @@ export default function Home() {
     }
   }
 
-  const mediaForDay = (day: ItineraryDay | ItineraryFormDay): MediaItem[] => {
+  const mediaForDay = useCallback((day: ItineraryDay | ItineraryFormDay): MediaItem[] => {
     let storedMedia: MediaItem[] = []
     if ('clipDescription' in day && day.clipDescription) {
       try {
@@ -939,19 +944,20 @@ export default function Home() {
       return [{ url: day.mediaUrl, type: day.mediaType === 'video' ? 'video' : 'image' }]
     }
     return []
-  }
+  }, [clipUrlsForDay])
 
   const openMediaModal = (title: string, items: MediaItem[], index = 0) => {
     if (!items.length) return
     setMediaModal({ title, items, index: Math.min(Math.max(index, 0), items.length - 1) })
   }
 
-  const renderMediaPreview = (item: MediaItem, title: string, autoplay = false) => {
+  const renderMediaPreview = (item: MediaItem, title: string, autoplay = false, onVideoEnded?: () => void) => {
     return (
       <MediaPreview
         item={item}
         title={title}
         autoplay={autoplay}
+        onVideoEnded={onVideoEnded}
         onImageFallback={img => {
           if (!img.src.includes('/api/generated-travel-image')) {
             img.src = generatedTravelImageUrl(title, postForm.cities || postForm.title, postForm.country)
@@ -970,6 +976,63 @@ export default function Home() {
       }
     })
   }
+
+  const detailMediaItems = useMemo<Array<MediaItem & { dayNumber: number; activity: string }>>(() => {
+    if (!vlog?.itinerary?.length) return []
+    return vlog.itinerary.flatMap(day => {
+      if (day.locked && !unlocked) return []
+      return mediaForDay(day).map(item => ({
+        ...item,
+        dayNumber: day.day,
+        activity: day.activity,
+      }))
+    })
+  }, [mediaForDay, vlog, unlocked])
+
+  const shiftDetailMedia = useCallback((delta: number) => {
+    setDetailMediaIndex(current => {
+      if (!detailMediaItems.length) return 0
+      return (current + delta + detailMediaItems.length) % detailMediaItems.length
+    })
+  }, [detailMediaItems.length])
+
+  useEffect(() => {
+    if (!detailMediaItems.length) {
+      setDetailMediaIndex(0)
+      return
+    }
+    setDetailMediaIndex(current => Math.min(current, detailMediaItems.length - 1))
+  }, [detailMediaItems.length])
+
+  useEffect(() => {
+    if (detailMediaItems.length <= 1) return
+    const activeMedia = detailMediaItems[detailMediaIndex]
+    if (!activeMedia || activeMedia.type !== 'image') return
+
+    const timer = window.setTimeout(() => shiftDetailMedia(1), 5000)
+    return () => window.clearTimeout(timer)
+  }, [detailMediaIndex, detailMediaItems, shiftDetailMedia])
+
+  useEffect(() => {
+    if (detailMediaItems.length <= 1) return
+    const activeMedia = detailMediaItems[detailMediaIndex]
+    if (!activeMedia || activeMedia.type !== 'video' || !clipPreviewUrl(activeMedia.url)) return
+
+    const handleYoutubeMessage = (event: MessageEvent) => {
+      if (!String(event.origin).includes('youtube.com')) return
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+        if (data.event === 'onStateChange' && data.info === 0) {
+          shiftDetailMedia(1)
+        }
+      } catch {
+        /* Ignore unrelated player messages. */
+      }
+    }
+
+    window.addEventListener('message', handleYoutubeMessage)
+    return () => window.removeEventListener('message', handleYoutubeMessage)
+  }, [detailMediaIndex, detailMediaItems, shiftDetailMedia])
 
   const removeDayMedia = (dayIndex: number, mediaIndex: number) => {
     setItinDays(days => days.map((day, index) => index === dayIndex ? {
@@ -1019,6 +1082,8 @@ export default function Home() {
     setItinDays(detail.itinerary.length ? detail.itinerary.map(day => ({
       day: day.day,
       activity: day.activity || '',
+      placeName: day.placeName || '',
+      placeQuery: day.placeQuery || '',
       cost: day.cost ? String(day.cost) : '',
       locked: day.locked,
       media: mediaForDay(day),
@@ -1618,9 +1683,6 @@ export default function Home() {
             </button>
             {profile ? (
               <>
-                <button type="button" className={`tn-avatar${page === 'dashboard' ? ' on' : ''}`} onClick={() => go('dashboard')} aria-label="Dashboard profile">
-                  {profile.avatarImage ? <img src={profile.avatarImage} alt={profile.name || 'Dashboard profile'} /> : profile.initials || 'ME'}
-                </button>
                 <button type="button" className="tn-btn" onClick={logout} aria-label="Log out">
                   <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                   <span className="tn-btn-label">Log out</span>
@@ -1901,10 +1963,9 @@ export default function Home() {
 
                   {/* Itinerary with media */}
                   {vlog.itinerary.length > 0 && (() => {
-                    const allDayMedia: Array<MediaItem & { dayNumber: number; activity: string }> = []
-                    const activeMedia: MediaItem & { dayNumber: number; activity: string } = { url: '', type: 'image', dayNumber: 0, activity: '' }
-                    const activeMediaIndex = 0
-                    const shiftDetailMedia = (_delta: number) => undefined
+                    const allDayMedia = detailMediaItems
+                    const activeMediaIndex = allDayMedia.length ? Math.min(detailMediaIndex, allDayMedia.length - 1) : 0
+                    const activeMedia = allDayMedia[activeMediaIndex]
 
                     return (
                       <>
@@ -1950,7 +2011,7 @@ export default function Home() {
                             ))}
                           </div>
 
-                          {false && (
+                          {activeMedia && allDayMedia.length > 0 && (
                             <div className="clips-sidebar">
                               <div className="clips-sidebar-header">
                                 <svg viewBox="0 0 24 24" width="16" height="16" style={{ stroke:'currentColor', fill:'none', strokeWidth:2 }}>
@@ -1974,7 +2035,7 @@ export default function Home() {
                                   }}
                                 >
                                   <div className="clip-video">
-                                    {renderMediaPreview(activeMedia, `Day ${activeMedia.dayNumber} ${activeMedia.type}`, true)}
+                                    {renderMediaPreview(activeMedia, `Day ${activeMedia.dayNumber} ${activeMedia.type}`, true, () => shiftDetailMedia(1))}
                                   </div>
                                   <div className="clip-info">
                                     <div className="clip-day">Day {activeMedia.dayNumber} · {activeMedia.type === 'video' ? 'Clip' : 'Photo'} {activeMediaIndex + 1} of {allDayMedia.length}</div>
@@ -2185,6 +2246,9 @@ export default function Home() {
                             Day {day.day}
                           </div>
                           <div className="inn">{day.activity}</div>
+                          {(day.placeName || day.placeQuery) && (!day.locked || unlocked) && (
+                            <div className="ico"><span className="ico-lbl">Map</span> {day.placeName || day.placeQuery}</div>
+                          )}
                           {(day.cost && (!day.locked || unlocked)) && (
                             <div className="ico"><span className="ico-lbl">Cost</span> ₱{day.cost.toLocaleString()}</div>
                           )}
@@ -2273,7 +2337,7 @@ export default function Home() {
             <div className="auth-card">
               <div className="auth-brand">Tourista</div>
               <h1>{authMode === 'register' ? 'Create your traveler profile' : 'Welcome back'}</h1>
-              <p>{authMode === 'register' ? 'Pick a display name and handle. We will keep you signed in for profile edits, posts, and unlocks.' : 'Enter your handle to continue your creator session.'}</p>
+              <p>{authMode === 'register' ? 'Pick a display name and username. We will keep you signed in for profile edits, posts, and unlocks.' : 'Enter your username to continue your creator session.'}</p>
               <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
                 <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => { setAuthMode('register'); setAuthError('') }}>Register</button>
                 <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setAuthError('') }}>Login</button>
@@ -2285,7 +2349,7 @@ export default function Home() {
                 </div>
               )}
               <div className="fg">
-                <label>Handle</label>
+                <label>Username</label>
                 <input
                   className="fi"
                   type="text"
@@ -2882,6 +2946,20 @@ export default function Home() {
                             value={d.cost} onChange={e => updDay(i, 'cost', e.target.value)}/>
                         </div>
 
+                        <div className="emoji-field">
+                          <span className="day-sub-lbl">Map / street-view location</span>
+                          <input
+                            className="fi"
+                            type="text"
+                            placeholder="e.g. Buckingham Palace, London, United Kingdom"
+                            value={d.placeName || ''}
+                            onChange={e => updDay(i, 'placeName', e.target.value)}
+                          />
+                          <div style={{ fontSize:'12px', color:'var(--color-text-secondary)', marginTop:'6px' }}>
+                            Tour Me uses this place to open the map or Street View for this day.
+                          </div>
+                        </div>
+
                         {/* Media carousel gallery */}
                         <div>
                           <div className="short-clip-note">Each itinerary video clip should be 1 minute or less. Longer clips will not be processed.</div>
@@ -3357,7 +3435,7 @@ export default function Home() {
                     <div className="kpc up">{profile?.travelStyle || 'Budget'} travel</div>
                   </div>
                   <div className="kp">
-                    <div className="kpl">Handle</div>
+                    <div className="kpl">Username</div>
                     <div className="kpv dash-kpv-text">@{profile?.handle || 'marisolroams'}</div>
                     <div className="kpc up">{profile?.verified ? 'Verified' : 'Creator'}</div>
                   </div>
@@ -3673,6 +3751,7 @@ export default function Home() {
                                     <div className="gi-itinerary-day">Day {day.day}</div>
                                     <div className="gi-itinerary-activity">{day.activity}</div>
                                   </div>
+                                  {(day.placeName || day.placeQuery) && <div className="gi-itinerary-detail">Map location: {day.placeName || day.placeQuery}</div>}
                                   {day.cost && <div className="gi-itinerary-detail">Estimated cost: PHP {day.cost.toLocaleString()}</div>}
                                   {day.highlights && <div className="dashboard-day-detail"><strong>Highlights:</strong> {day.highlights}</div>}
                                   {day.foodTips && <div className="dashboard-day-detail"><strong>Food tips:</strong> {day.foodTips}</div>}
